@@ -99,7 +99,7 @@ def load_history(engine,rows,cutoff=None,backtest=False):
         engine.update(lg,h,a,day,hg,ag)
     return records
 
-def value_rows(engine,fixtures,odds,asof,edge_min=.04,margin=.025):
+def value_rows(engine,fixtures,odds,asof,edge_min=.04,margin=.025,until=None,markets=None):
     odds_index=defaultdict(list)
     for o in odds:
         if not o.get('odds'): continue
@@ -111,9 +111,10 @@ def value_rows(engine,fixtures,odds,asof,edge_min=.04,margin=.025):
     out=[]
     for f in fixtures:
         day=date(f['date']); lg=f['league']; h=f['home']; a=f['away']
-        if day<asof: continue
-        pred=engine.predict(lg,h,a,day)
+        if day<asof or (until is not None and day>until): continue
+        pred=engine.predict(lg,h,a,asof)
         for market,p in pred['p'].items():
+            if markets is not None and market not in markets: continue
             # Confidence floor is deliberately conservative and NOT empirically calibrated.
             # It is a heuristic until proper uncertainty calibration is completed.
             uncertainty=clip(0.09/math.sqrt(max(1,pred['history_min'])/10),.035,.13)
