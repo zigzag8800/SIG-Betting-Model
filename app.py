@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 from sig_model import Engine, load_history, value_rows
 from historical_coverage import audit_uploaded_files
+from types import SimpleNamespace
 
 st.set_page_config(page_title='SIG Betting Model', page_icon='⚽', layout='centered')
 st.title('⚽ SIG Betting Model 3.6')
@@ -231,6 +232,40 @@ with st.expander('1 · Datakilde',expanded=True):
 with st.expander('1b · Historiske statistikdata – datadækning',expanded=False):
     st.caption('Undersøg dine lokalt hentede CSV-filer fra Football-Data.co.uk. Understøtter E0, E1, SP1, I1, D1 og F1. Ingen automatisk download, ingen sammenblanding af holdnavne og ingen ændring af modelberegninger.')
     st.markdown('[Åbn Football-Data.co.uk sæsonfiler](https://www.football-data.co.uk/downloadm.php)')
+    st.caption('Kildens fair-use-regler: kun personlig/akademisk brug og højst to lette automatiske hentninger om ugen. Brug ikke knappen hyppigere, heller ikke efter genstart.')
+    historical_years=st.multiselect('Sæsoner til historiske statistikker', [2024,2025,2026], default=[2025,2026], key='stats_seasons')
+    if st.button('Hent statistikker for alle seks ligaer', key='fetch_six_stat_leagues'):
+        if not historical_years:
+            st.error('Vælg mindst én sæson.')
+        else:
+            downloaded=[]; download_errors=[]
+            for year in sorted(historical_years):
+                code=f'{year%100:02d}{(year+1)%100:02d}'
+                for div in ('E0','E1','SP1','I1','D1','F1'):
+                    url=f'https://www.football-data.co.uk/mmz4281/{code}/{div}.csv'
+                    try:
+                        req=urllib.request.Request(url,headers={'User-Agent':'SIG-Betting-Model/1.0 (personal research)'})
+                        with urllib.request.urlopen(req,timeout=20) as resp:
+                            data=resp.read(5*1024*1024+1)
+                            if len(data)>5*1024*1024:
+                                raise ValueError('Fil større end 5 MB')
+                        downloaded.append(SimpleNamespace(name=f'{div}_{code}.csv',getvalue=lambda data=data:data))
+                    except Exception as exc:
+                        download_errors.append(f'{div} {year}/{year+1}: {str(exc)[:110]}')
+                    time.sleep(1)
+            st.session_state['auto_stat_coverage']=audit_uploaded_files(downloaded)
+            st.session_state['auto_stat_errors']=download_errors
+            st.session_state['auto_stat_time']=dt.datetime.now(dt.timezone.utc).isoformat()
+    if st.session_state.get('auto_stat_coverage'):
+        st.markdown('**Automatisk hentet datadækning**')
+        st.dataframe(pd.DataFrame(st.session_state['auto_stat_coverage']),hide_index=True,use_container_width=True)
+        summary=st.session_state['auto_stat_coverage']
+        st.metric('Kampe i hentede CSV-filer',sum(r.get('Kampe',0) for r in summary if not r.get('Fejl')))
+        st.caption('Seneste hentning: '+st.session_state.get('auto_stat_time','ukendt'))
+        st.download_button('Download dækningsrapport (CSV)',to_csv(summary,list(dict.fromkeys(k for row in summary for k in row))),file_name='sig_statistik_daekning.csv',mime='text/csv')
+    if st.session_state.get('auto_stat_errors'):
+        st.warning('Nogle filer kunne ikke hentes: '+'; '.join(st.session_state['auto_stat_errors']))
+
     audits=st.file_uploader('Vælg en eller flere historiske CSV-filer',type='csv',accept_multiple_files=True,key='audit_csv')
     if audits:
         table=audit_uploaded_files(audits)
