@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 from sig_model import Engine, load_history, value_rows
 from model_lab import compare_variants
+from bookmaker_lab import parse_historical_csv, compare_to_bookmaker
 from historical_coverage import audit_uploaded_files
 from types import SimpleNamespace
 
@@ -254,6 +255,7 @@ with st.expander('1b · Historiske statistikdata – datadækning',expanded=Fals
                     except Exception as exc:
                         download_errors.append(f'{div} {year}/{year+1}: {str(exc)[:110]}')
                     time.sleep(1)
+            st.session_state['historical_bookmaker_files']=downloaded
             st.session_state['auto_stat_coverage']=audit_uploaded_files(downloaded)
             st.session_state['auto_stat_errors']=download_errors
             st.session_state['auto_stat_time']=dt.datetime.now(dt.timezone.utc).isoformat()
@@ -470,6 +472,51 @@ with st.expander('6 · Model-laboratorium 3.7 (eksperiment)',expanded=False):
             st.info('Start testen for at se, om 5 eller 10 kampe og ændret Elo-vægt hjælper. Version 3.6 forbliver uændret.')
     else:
         st.info('Hent historiske kampresultater ovenfor, før du starter modeltesten.')
+
+with st.expander('7 · Bookmaker-laboratorium 3.8', expanded=False):
+    st.caption('Sammenligner SIG A og E med marginjusterede 1X2-odds på præcis de samme afsluttede kampe. Kampresultater og odds kommer fra samme CSV-kilde – ikke fra et usikkert holdnavne-match.')
+    stored=st.session_state.get('historical_bookmaker_files',[])
+    st.caption('Genbruger allerede hentede historiske statistikfiler fra sektion 1b. Du kan også uploade filer her. Undgå ekstra automatiske downloads af hensyn til kildens begrænsninger.')
+    uploaded=st.file_uploader('Alternativt: CSV-filer med historiske odds',type='csv',accept_multiple_files=True,key='benchmark_files')
+    selected=list(uploaded) if uploaded else stored
+    closing_only=st.checkbox('Kun dokumenterede closing odds',value=True,key='benchmark_closing')
+    if selected:
+        st.success(f'{len(selected)} historiske filer klar til test.')
+        if st.button('Sammenlign med bookmakerne',key='run_bookmaker_lab'):
+            try:
+                benchmark_matches,rejected=parse_historical_csv(selected)
+                if not benchmark_matches:
+                    st.error('Ingen færdigspillede kampe fundet i filerne.')
+                else:
+                    first=min(dt.date.fromisoformat(r['date']) for r in benchmark_matches)
+                    last=max(dt.date.fromisoformat(r['date']) for r in benchmark_matches)
+                    # Historical seasons can start with cold teams, so warm up at least 120 days.
+                    test_start=first+dt.timedelta(days=120)
+                    with st.spinner('Beregner sammenlignelige prognoser og fjerner bookmakerens margin…'):
+                        results,excluded=compare_to_bookmaker(benchmark_matches,test_start,last+dt.timedelta(days=1),closing_only)
+                    st.session_state['benchmark_result']=(results,excluded,rejected,len(benchmark_matches),test_start.isoformat(),closing_only)
+            except Exception as exc:
+                st.error(f'Bookmaker-testfejl: {exc}')
+    else:
+        st.info('Hent først historiske statistikker under sektion 1b. Så kan de bruges direkte her.')
+    result=st.session_state.get('benchmark_result')
+    if result:
+        rows,excluded,rejected,total,start_date,was_closing=result
+        st.caption(f'Datagrunlag: {total} historiske kampe, test fra {start_date}; {"kun closing" if was_closing else "closing eller opening"}. {rejected} ufuldstændige rækker frasorteret.')
+        if not rows:
+            st.warning('Ingen testkampe med gyldige odds og mindst fem forudgående kampe pr. hold. Prøv flere sæsoner, eller fravælg closing-only med tydeligt angivet lavere datakvalitet.')
+        else:
+            bdf=pd.DataFrame(rows)
+            st.metric('Kamp-sammenligninger',int(len(bdf)/2))
+            tab=(bdf.groupby('variant',as_index=False).agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean'),bookmaker_brier=('market_brier','mean'),bookmaker_logloss=('market_logloss','mean')).round(4))
+            st.dataframe(tab,hide_index=True,use_container_width=True)
+            league=(bdf.groupby(['variant','league'],as_index=False).agg(kampe=('brier','size'),brier=('brier','mean'),bookmaker_brier=('market_brier','mean')).round(4))
+            st.markdown('**Fordelt på liga**')
+            st.dataframe(league,hide_index=True,use_container_width=True)
+            st.download_button('Download sammenligningen (CSV)',to_csv(rows,list(rows[0])),'sig_vs_bookmakers.csv','text/csv',key='export_benchmark')
+            st.caption('En bedre historisk Brier-score er ikke dokumentation for profit. Udvælgelse af model E efter tidligere test er ikke uafhængig validering. Odds fra forskellige udbydere sammenblandes ikke på den enkelte kamp.')
+        if excluded['no_odds'] or excluded['opening_only']:
+            st.caption(f'Sprunget over: {excluded["no_odds"]//2} kampe uden gyldige odds og {excluded["opening_only"]//2} kun med opening odds.')
 
 st.divider()
 st.caption('SIG Model · Kun analyse · Ingen automatiske spil · Opta, kort, hjørnespark og live bookmakerodds er endnu ikke integreret.')
