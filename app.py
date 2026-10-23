@@ -14,7 +14,7 @@ import streamlit as st
 from sig_model import Engine, load_history, value_rows
 
 st.set_page_config(page_title='SIG Betting Model', page_icon='⚽', layout='centered')
-st.title('⚽ SIG Betting Model 3.4')
+st.title('⚽ SIG Betting Model 3.5')
 st.caption('Mobilvenlig analyse · Chrome på iPhone · Ingen automatiske væddemål')
 st.warning('Eksperimentel model: sandsynlighederne er ikke valideret som profitable. Minimumsodds bygger på en foreløbig usikkerhedsmargin.')
 
@@ -256,10 +256,10 @@ if hist:
             st.dataframe(df[display],use_container_width=True,hide_index=True)
             st.download_button('Download 30 kandidater (CSV)',to_csv(df.to_dict('records'),list(df.columns)),'sig_kandidater.csv','text/csv')
             if not odds: st.info('Ingen odds indlæst: disse er kandidater med modelberegnede minimumsodds, ikke godkendte væddemål.')
-        st.caption('Kort, hjørnespark, Opta/xG og automatisk bookmakerintegration er IKKE implementeret i 3.4. Seks ligaer via API; Superliga via CSV.')
+        st.caption('Kort, hjørnespark, Opta/xG og automatisk bookmakerintegration er IKKE implementeret i 3.5. Seks ligaer via API; Superliga via CSV.')
         st.subheader('5 · Historisk test')
         st.caption('Kronologisk test: Modellen forudsiger hver kamp ud fra tidligere resultater, før den lærer kampens resultat. Brier og log-loss måler sandsynligheder, ikke gevinst.')
-        st.caption('Lavere score er bedre. Sammenligning med en simpel historisk liga-baseline er nødvendig; modellen er ikke dokumenteret bedre end markedet.')
+        st.caption('Lavere score er bedre. Sammenligningen er mod en simpel historisk liga-baseline, ikke mod bookmakerodds.')
         if st.button('Kør kronologisk backtest', key='run_backtest'):
             with st.spinner('Tester afsluttede kampe i datoorden…'):
                 test_engine=Engine()
@@ -275,12 +275,27 @@ if hist:
             st.metric('Historisk testede kampe',len(bdf))
             st.metric('Gennemsnitlig Brier-score',f'{bdf.brier.mean():.4f}')
             st.metric('Gennemsnitlig log-loss',f'{bdf.logloss.mean():.4f}')
-            st.caption('Kun kampe hvor begge hold har mindst 5 tidligere registrerede kampe medregnes. Testen anvender faktiske slutresultater, men ingen odds eller ROI.')
+            st.markdown('**Sammenligning med simpel liga-baseline**')
+            comparison=pd.DataFrame([
+                {'Metode':'SIG Model 3.5','Brier':bdf.brier.mean(),'Log-loss':bdf.logloss.mean()},
+                {'Metode':'Historisk ligafordeling','Brier':bdf.baseline_brier.mean(),'Log-loss':bdf.baseline_logloss.mean()},
+            ])
+            st.dataframe(comparison.round(4),hide_index=True,use_container_width=True)
+            brier_diff=bdf.baseline_brier.mean()-bdf.brier.mean()
+            if brier_diff>0:
+                st.success(f'Modellen har {brier_diff:.4f} lavere Brier-score end baseline på disse testkampe.')
+            elif brier_diff<0:
+                st.warning(f'Modellen har {-brier_diff:.4f} højere (dårligere) Brier-score end baseline på disse testkampe.')
+            else:
+                st.info('Modellen og baseline har samme gennemsnitlige Brier-score.')
+            st.caption('Kun kampe hvor begge hold har mindst 5 tidligere registrerede kampe medregnes. Resultater fra samme kalenderdato holdes ude indtil dagens forudsigelser er lavet. Baseline bruger kun tidligere ligakampe. Ingen odds eller ROI.')
             per_league=(bdf.groupby('league',as_index=False)
-                       .agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean'))
+                       .agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean'),baseline_brier=('baseline_brier','mean'),baseline_logloss=('baseline_logloss','mean'))
                        .sort_values('league'))
             per_league['brier']=per_league['brier'].round(4)
             per_league['logloss']=per_league['logloss'].round(4)
+            per_league['baseline_brier']=per_league['baseline_brier'].round(4)
+            per_league['baseline_logloss']=per_league['baseline_logloss'].round(4)
             st.markdown('**Resultater fordelt på liga**')
             st.dataframe(per_league,hide_index=True,use_container_width=True)
             st.markdown('**Kalibrering af hjemmesejre**')

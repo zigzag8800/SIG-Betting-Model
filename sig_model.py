@@ -6,6 +6,7 @@ No bookmaker scraping, no invented odds, no automatic wagering.
 """
 import argparse, csv, datetime as dt, math, pathlib, statistics
 from collections import defaultdict
+from itertools import groupby
 
 LEAGUES={'PL':'Premier League','ELC':'Championship','PD':'La Liga','SA':'Serie A','BL1':'Bundesliga','FL1':'Ligue 1','DK1':'Superliga'}
 MARKETS=['1','X','2','1X','X2','12','O1.5','O2.5','O3.5','U2.5','U3.5','U4.5','BTTS_Y','BTTS_N','H_O0.5','H_O1.5','A_O0.5','A_O1.5']
@@ -85,18 +86,50 @@ class Engine:
         self.games[self._key(league,home)].append({'date':today,'home':True,'gf':hg,'ga':ag})
         self.games[self._key(league,away)].append({'date':today,'home':False,'gf':ag,'ga':hg})
 
-def load_history(engine,rows,cutoff=None,backtest=False):
-    records=[]
-    for r in sorted(rows,key=lambda r:(r['date'],r['league'],r['home'])):
-        day=date(r['date'])
-        if cutoff and day>=cutoff: continue
-        lg=r['league']; h=r['home']; a=r['away']; hg=int(r['home_goals']); ag=int(r['away_goals'])
+def load_history(engine, rows, cutoff=None, backtest=False):
+    """Walk chronologically, withholding *all* same-date results until predictions finish.
+
+    Matches on the same UTC date have no guaranteed kickoff ordering in imported
+    CSV data. A day-level block avoids accidental same-day information leakage.
+    Baseline: smoothed league-wide W/D/L prior from strictly earlier dates.
+    """
+    records = []
+    league_counts = defaultdict(lambda: {'1': 0, 'X': 0, '2': 0})
+    rows = sorted(rows, key=lambda r: (r['date'][:10], r['league'], r['home']))
+    for day_str, grouped in groupby(rows, key=lambda r: r['date'][:10]):
+        day = date(day_str)
+        if cutoff and day >= cutoff:
+            break
+        matches = list(grouped)
         if backtest:
-            pr=engine.predict(lg,h,a,day)
-            if pr['history_min']>=5:
-                actual='1' if hg>ag else 'X' if hg==ag else '2'
-                records.append({'date':day.isoformat(),'league':lg,'home':h,'away':a,'actual':actual,'p1':pr['p']['1'],'px':pr['p']['X'],'p2':pr['p']['2'],'brier':sum((pr['p'][o]-(1 if o==actual else 0))**2 for o in ('1','X','2'))/3,'logloss':-math.log(max(1e-9,pr['p'][actual]))})
-        engine.update(lg,h,a,day,hg,ag)
+            for r in matches:
+                lg, h, a = r['league'], r['home'], r['away']
+                hg, ag = int(r['home_goals']), int(r['away_goals'])
+                prediction = engine.predict(lg, h, a, day)
+                if prediction['history_min'] < 5:
+                    continue
+                actual = '1' if hg > ag else 'X' if hg == ag else '2'
+                # Laplace smoothing; no result from the current day is included.
+                counts = league_counts[lg]
+                n = sum(counts.values())
+                baseline = {o: (counts[o] + 1) / (n + 3) for o in ('1', 'X', '2')}
+                model = prediction['p']
+                brier = lambda p: sum((p[o] - int(o == actual)) ** 2 for o in ('1', 'X', '2')) / 3
+                records.append({
+                    'date': day.isoformat(), 'league': lg, 'home': h, 'away': a,
+                    'actual': actual, 'p1': model['1'], 'px': model['X'], 'p2': model['2'],
+                    'brier': brier(model), 'logloss': -math.log(max(1e-9, model[actual])),
+                    'baseline_p1': baseline['1'], 'baseline_px': baseline['X'],
+                    'baseline_p2': baseline['2'], 'baseline_brier': brier(baseline),
+                    'baseline_logloss': -math.log(max(1e-9, baseline[actual])),
+                })
+        # Only after every game on this date has been predicted, learn results.
+        for r in matches:
+            lg, h, a = r['league'], r['home'], r['away']
+            hg, ag = int(r['home_goals']), int(r['away_goals'])
+            engine.update(lg, h, a, day, hg, ag)
+            outcome = '1' if hg > ag else 'X' if hg == ag else '2'
+            league_counts[lg][outcome] += 1
     return records
 
 def value_rows(engine,fixtures,odds,asof,edge_min=.04,margin=.025,until=None,markets=None):
@@ -144,7 +177,7 @@ def main():
     history=read_csv(args.history,['date','league','home','away','home_goals','away_goals'])
     eng=Engine(); back=load_history(eng,history,asof,backtest=args.backtest)
     if args.backtest:
-        write_csv(pathlib.Path(args.output)/'backtest.csv',back,['date','league','home','away','actual','p1','px','p2','brier','logloss'])
+        write_csv(pathlib.Path(args.output)/'backtest.csv',back,['date','league','home','away','actual','p1','px','p2','brier','logloss','baseline_p1','baseline_px','baseline_p2','baseline_brier','baseline_logloss'])
         if back: print(f'Chronological backtest: {len(back)} games | mean Brier={statistics.mean(r["brier"] for r in back):.4f} | mean logloss={statistics.mean(r["logloss"] for r in back):.4f}')
         else: print('No eligible historical games for backtest')
     if args.fixtures:
