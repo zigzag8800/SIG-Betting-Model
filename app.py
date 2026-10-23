@@ -7,13 +7,14 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import json
 
 import pandas as pd
 import streamlit as st
 from sig_model import Engine, load_history, value_rows
 
 st.set_page_config(page_title='SIG Betting Model', page_icon='⚽', layout='centered')
-st.title('⚽ SIG Betting Model 3.1')
+st.title('⚽ SIG Betting Model 3.2')
 st.caption('Mobilvenlig analyse · Chrome på iPhone · Ingen automatiske væddemål')
 st.warning('Eksperimentel model: sandsynlighederne er ikke valideret som profitable. Minimumsodds bygger på en foreløbig usikkerhedsmargin.')
 
@@ -37,19 +38,26 @@ def to_csv(rows, fields):
     writer.writeheader(); writer.writerows(rows)
     return out.getvalue().encode('utf-8-sig')
 
-@st.cache_data(ttl=3600, show_spinner=False)
+# Cache successful responses only. A denied/rate-limited request is never cached.
+@st.cache_data(ttl=21600, show_spinner=False)
 def api_matches(token, league, season):
     url=f'https://api.football-data.org/v4/competitions/{league}/matches?season={season}'
-    req=urllib.request.Request(url,headers={'X-Auth-Token':token,'Accept':'application/json','User-Agent':'SIG-Betting-Model/1.0'})
-    import json
+    req=urllib.request.Request(url,headers={'X-Auth-Token':token,'Accept':'application/json','User-Agent':'SIG-Betting-Model/1.1'})
     try:
         with urllib.request.urlopen(req,timeout=25) as response:
             return json.load(response)['matches']
     except urllib.error.HTTPError as e:
-        body=e.read().decode('utf-8','replace')[:220]
-        raise RuntimeError(f'API HTTP {e.code}: {body}') from e
+        body=e.read().decode('utf-8','replace')[:180]
+        raise ApiError(e.code, body, e.headers.get('Retry-After')) from e
     except Exception as e:
         raise RuntimeError(f'Kunne ikke hente {league}/{season}: {e}') from e
+
+class ApiError(Exception):
+    def __init__(self, status, message, retry_after=None):
+        super().__init__(message)
+        self.status=status
+        self.retry_after=retry_after
+
 
 def convert(matches, league):
     history=[]; fixtures=[]
@@ -74,24 +82,63 @@ with st.expander('1 · Datakilde',expanded=True):
         today=dt.date.today()
         default_season=today.year if today.month>=7 else today.year-1
         seasons=st.multiselect('Sæsonernes startår',list(range(default_season-4,default_season+1)),default=[default_season-1,default_season])
-        st.caption('API tilbyder seks ligaer i denne app. Superligaen kræver separat CSV-import. Gratis abonnement kan begrænse sæsoner og kald.')
+        st.caption('Vælg helst 1–2 sæsoner ad gangen. Kun succesfulde API-svar caches i 6 timer. Superliga kræver CSV. Manglende adgang vises tydeligt.')
         fetch=st.button('Hent kampdata',type='primary')
         if fetch:
             if not token or not chosen or not seasons:
                 st.error('Angiv API-nøgle, mindst én liga og en sæson.')
             else:
-                hist=[]; fixtures=[]; errors=[]
-                with st.spinner('Henter kampe fra football-data.org…'):
-                    for name in chosen:
-                        for season in sorted(seasons):
-                            try:
-                                matches=api_matches(token,LEAGUES[name],season)
-                                h,f=convert(matches,LEAGUES[name]); hist+=h; fixtures+=f
-                            except Exception as e: errors.append(f'{name} {season}: {e}')
-                st.session_state['history']=hist; st.session_state['fixtures']=fixtures
-                st.session_state['source_label']='football-data.org'
-                if errors: st.warning('\n\n'.join(errors))
-                st.success(f'Indlæst: {len(hist)} afsluttede og {len(fixtures)} kommende kampe.')
+                hist=[]; fixtures=[]; errors=[]; successful=[]; denied=[]; rate_limited=False
+                jobs=[(name, season) for name in chosen for season in sorted(seasons)]
+                # Free football-data.org plans commonly allow 10 requests/minute.
+                # Limit this click to 8 requests to leave room for other clients.
+                max_requests=8
+                attempted=0
+                with st.spinner('Henter kampe – højst 8 API-kald ad gangen…'):
+                    for name, season in jobs:
+                        if attempted>=max_requests:
+                            errors.append(f'Ikke hentet: resten af liga/sæson-valgene. Vælg færre ligaer/sæsoner, og hent igen senere.')
+                            break
+                        attempted+=1
+                        try:
+                            matches=api_matches(token,LEAGUES[name],season)
+                            h,f=convert(matches,LEAGUES[name]); hist+=h; fixtures+=f
+                            successful.append(f'{name} {season}: {len(h)} afsluttede, {len(f)} kommende')
+                        except ApiError as e:
+                            if e.status==403:
+                                denied.append(f'{name} {season}')
+                            elif e.status==429:
+                                errors.append(f'API-grænse nået (429). Stopper yderligere kald. Vent mindst {e.retry_after or "60"} sekunder før næste forsøg.')
+                                rate_limited=True
+                                break
+                            elif e.status==401:
+                                errors.append('API-nøglen blev afvist (401). Kontrollér nøglen i Streamlit Secrets.')
+                                break
+                            else:
+                                errors.append(f'{name} {season}: HTTP {e.status}: {e}')
+                        except Exception as e:
+                            errors.append(f'{name} {season}: {e}')
+                if successful:
+                    # Preserve data from prior fetches when a later batch is partial.
+                    old_h=st.session_state.get('history',[])
+                    old_f=st.session_state.get('fixtures',[])
+                    hist=list({(r['date'],r['league'],r['home'],r['away']):r for r in old_h+hist}.values())
+                    fixtures=list({(r['date'],r['league'],r['home'],r['away']):r for r in old_f+fixtures}.values())
+                    st.session_state['history']=hist
+                    st.session_state['fixtures']=fixtures
+                    st.session_state['source_label']='football-data.org'
+                st.session_state['api_fetch_report']={'successful':successful,'denied':denied,'errors':errors}
+        report=st.session_state.get('api_fetch_report')
+        if report:
+            if report['successful']:
+                st.success('Hentet: '+str(len(report['successful']))+' liga/sæson-kombinationer. '+str(len(st.session_state.get('history',[])))+' afsluttede og '+str(len(st.session_state.get('fixtures',[])))+' kommende kampe i hukommelsen.')
+                with st.expander('Se præcis hvilke sæsoner der lykkedes'):
+                    st.write('\n\n'.join(report['successful']))
+            if report['denied']:
+                st.warning('Ingen adgang (403), sprunget over: '+', '.join(report['denied']))
+            if report['errors']:
+                st.warning('\n\n'.join(report['errors']))
+            st.caption('Et grønt antal betyder kun, at NOGLE data er hentet. Kontrollér listen over lykkede ligaer og sæsoner, før du stoler på kandidaterne.')
     else:
         hf=st.file_uploader('Historik: history.csv',type='csv',key='h')
         ff=st.file_uploader('Kommende kampe: fixtures.csv',type='csv',key='f')
