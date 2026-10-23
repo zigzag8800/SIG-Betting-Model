@@ -13,6 +13,7 @@ import json
 import pandas as pd
 import streamlit as st
 from sig_model import Engine, load_history, value_rows
+from model_lab import compare_variants
 from historical_coverage import audit_uploaded_files
 from types import SimpleNamespace
 
@@ -439,6 +440,36 @@ if hist:
     except Exception as e: st.error(f'Analysefejl: {e}')
 else:
     st.info('Start med at hente historiske kampe ovenfor. Intet er simuleret eller opdigtet.')
+
+with st.expander('6 · Model-laboratorium 3.7 (eksperiment)',expanded=False):
+    st.caption('Dette er en separat walk-forward-test: samtlige modeller forudsiger de samme kampe uden at kende samme dags resultater. Din normale model og top-30-liste ændres ikke.')
+    lab_history=st.session_state.get('history',[])
+    lab_cutoff=dt.date.today()
+    if lab_history:
+        first_day=min(dt.date.fromisoformat(r['date'][:10]) for r in lab_history)
+        suggested=max(first_day+dt.timedelta(days=180),lab_cutoff-dt.timedelta(days=365))
+        lab_start=st.date_input('Start på testperiode (tidligere kampe bruges kun som træning)',value=min(suggested,lab_cutoff-dt.timedelta(days=1)),min_value=first_day,max_value=lab_cutoff-dt.timedelta(days=1),key='lab_start')
+        if st.button('Sammenlign seks modelvarianter',key='run_lab'):
+            with st.spinner('Beregner sammenlignelige kronologiske prognoser…'):
+                lab_rows=compare_variants(lab_history,lab_cutoff,lab_start)
+                st.session_state['lab_rows']=lab_rows
+                st.session_state['lab_signature']=(len(lab_history),lab_start.isoformat(),lab_cutoff.isoformat())
+        lab_rows=st.session_state.get('lab_rows',[])
+        if lab_rows:
+            if st.session_state.get('lab_signature')!=(len(lab_history),lab_start.isoformat(),lab_cutoff.isoformat()):
+                st.warning('Historik eller testperiode er ændret. Kør testen igen.')
+            else:
+                lab_df=pd.DataFrame(lab_rows)
+                lab_summary=(lab_df.groupby('variant',as_index=False)
+                             .agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean'))
+                             .sort_values('brier'))
+                st.dataframe(lab_summary.round(4),hide_index=True,use_container_width=True)
+                st.caption('Lavere Brier og log-loss er bedre. Dette er eksperimenter på en valgt periode, ikke en uafhængig fremtidig test. Justering efter testresultaterne kræver en ny urørt periode.')
+                st.download_button('Download model-sammenligning',to_csv(lab_rows,list(lab_rows[0])),'sig_model_lab.csv','text/csv',key='lab_csv')
+        else:
+            st.info('Start testen for at se, om 5 eller 10 kampe og ændret Elo-vægt hjælper. Version 3.6 forbliver uændret.')
+    else:
+        st.info('Hent historiske kampresultater ovenfor, før du starter modeltesten.')
 
 st.divider()
 st.caption('SIG Model · Kun analyse · Ingen automatiske spil · Opta, kort, hjørnespark og live bookmakerodds er endnu ikke integreret.')
