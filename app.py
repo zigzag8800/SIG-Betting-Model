@@ -78,11 +78,11 @@ with st.expander('1 · Datakilde',expanded=True):
     if source=='football-data.org API':
         secret=st.secrets.get('FOOTBALL_DATA_API_KEY','') if hasattr(st,'secrets') else ''
         token=st.text_input('Din API-nøgle (skjult)',value=secret,type='password',help='Sendes kun til football-data.org fra appens server. Gemmes ikke i kode eller downloadfiler.')
-        chosen=st.multiselect('Ligaer',list(LEAGUES),default=['Premier League'])
+        chosen=st.multiselect('Ligaer',list(LEAGUES),default=list(LEAGUES))
         today=dt.date.today()
         default_season=today.year if today.month>=7 else today.year-1
         seasons=st.multiselect('Sæsonernes startår',list(range(default_season-4,default_season+1)),default=[default_season-1,default_season])
-        st.caption('Vælg helst 1–2 sæsoner ad gangen. Kun succesfulde API-svar caches i 6 timer. Superliga kræver CSV. Manglende adgang vises tydeligt.')
+        st.caption('Alle seks API-ligaer er forvalgt. Ét tryk henter alle valgte ligaer og sæsoner med automatisk hastighedsbegrænsning. Superliga kræver fortsat CSV.')
         st.caption('Data fra tidligere vellykkede hentninger i denne browsersession bevares. API-cache gælder 6 timer.')
         if st.button('Ryd indlæste kampdata', help='Fjerner kun kampdata i denne browsersession; ikke din API-nøgle.'):
             for key in ('history','fixtures','loaded_combos','api_fetch_report'):
@@ -97,16 +97,15 @@ with st.expander('1 · Datakilde',expanded=True):
                 loaded=st.session_state.setdefault('loaded_combos', {})
                 jobs=[(name, season) for name in chosen for season in sorted(seasons) if f'{LEAGUES[name]}:{season}' not in loaded]
                 skipped=len(chosen)*len(seasons)-len(jobs)
-                # Free football-data.org plans commonly allow 10 requests/minute.
-                # Limit this click to 8 requests to leave room for other clients.
-                max_requests=8
-                attempted=0
-                with st.spinner('Henter kampe – højst 8 API-kald ad gangen…'):
-                    for name, season in jobs:
-                        if attempted>=max_requests:
-                            errors.append(f'Ikke hentet: resten af liga/sæson-valgene. Vælg færre ligaer/sæsoner, og hent igen senere.')
-                            break
-                        attempted+=1
+                # Pace requests below the common 10 requests/minute free-tier limit.
+                # An unavailable league is reported; already loaded seasons are skipped.
+                progress=st.progress(0, text=f'0 af {len(jobs)} behandlet') if jobs else None
+                with st.spinner('Henter alle valgte ligaer og sæsoner…'):
+                    for index, (name, season) in enumerate(jobs, start=1):
+                        if index>1:
+                            time.sleep(7)
+                        if progress is not None:
+                            progress.progress((index-1)/len(jobs), text=f'Henter {index} af {len(jobs)}: {name} {season}')
                         try:
                             matches=api_matches(token,LEAGUES[name],season)
                             h,f=convert(matches,LEAGUES[name]); hist+=h; fixtures+=f
@@ -116,7 +115,7 @@ with st.expander('1 · Datakilde',expanded=True):
                             if e.status==403:
                                 denied.append(f'{name} {season}')
                             elif e.status==429:
-                                errors.append(f'API-grænse nået (429). Stopper yderligere kald. Vent mindst {e.retry_after or "60"} sekunder før næste forsøg.')
+                                errors.append(f'API-grænse nået (429). Resterende kald stoppet. Vent mindst {e.retry_after or "60"} sekunder og tryk igen for kun at hente manglende sæsoner.')
                                 rate_limited=True
                                 break
                             elif e.status==401:
@@ -126,6 +125,9 @@ with st.expander('1 · Datakilde',expanded=True):
                                 errors.append(f'{name} {season}: HTTP {e.status}: {e}')
                         except Exception as e:
                             errors.append(f'{name} {season}: {e}')
+                        finally:
+                            if progress is not None:
+                                progress.progress(index/len(jobs), text=f'Behandlet {index} af {len(jobs)}')
                 if successful:
                     # Preserve data from prior fetches when a later batch is partial.
                     old_h=st.session_state.get('history',[])
