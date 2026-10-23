@@ -13,6 +13,7 @@ import json
 import pandas as pd
 import streamlit as st
 from sig_model import Engine, load_history, value_rows
+from historical_coverage import audit_uploaded_files
 
 st.set_page_config(page_title='SIG Betting Model', page_icon='⚽', layout='centered')
 st.title('⚽ SIG Betting Model 3.6')
@@ -226,6 +227,21 @@ with st.expander('1 · Datakilde',expanded=True):
     with st.expander('CSV-skabeloner'):
         st.download_button('Historik-skabelon',to_csv([],HIST_FIELDS),'history_template.csv','text/csv')
         st.download_button('Kampprogram-skabelon',to_csv([],FIX_FIELDS),'fixtures_template.csv','text/csv')
+
+with st.expander('1b · Historiske statistikdata – datadækning',expanded=False):
+    st.caption('Undersøg dine lokalt hentede CSV-filer fra Football-Data.co.uk. Understøtter E0, E1, SP1, I1, D1 og F1. Ingen automatisk download, ingen sammenblanding af holdnavne og ingen ændring af modelberegninger.')
+    st.markdown('[Åbn Football-Data.co.uk sæsonfiler](https://www.football-data.co.uk/downloadm.php)')
+    audits=st.file_uploader('Vælg en eller flere historiske CSV-filer',type='csv',accept_multiple_files=True,key='audit_csv')
+    if audits:
+        table=audit_uploaded_files(audits)
+        st.dataframe(pd.DataFrame(table),hide_index=True,use_container_width=True)
+        good=[r for r in table if not r.get('Fejl') and r.get('Kampe',0)>0]
+        st.metric('Kampe med læsbar ligakode',sum(r['Kampe'] for r in good))
+        st.caption('Procenterne angiver udfyldte felter – ikke valideret datakvalitet. Bet365-kolonner vises kun som tilgængelighed; deres værdier bruges endnu ikke til anbefalinger.')
+        if len({r['Liga'] for r in good})<6:
+            st.warning('Ikke alle seks ligaer er repræsenteret i de uploadede filer.')
+    else:
+        st.info('Upload CSV-filer fra leverandøren for at få en reel dækningsrapport. Vi antager ikke, at manglende kolonner indeholder data.')
 
 with st.expander('2 · Odds (valgfrit)'):
     st.caption('Ingen bookmaker-API er koblet på endnu. Indlæs kun odds, du har lov til at anvende. Uden odds viser appen beregnede minimumspriser.')
