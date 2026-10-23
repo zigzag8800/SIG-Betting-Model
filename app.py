@@ -14,7 +14,7 @@ import streamlit as st
 from sig_model import Engine, load_history, value_rows
 
 st.set_page_config(page_title='SIG Betting Model', page_icon='⚽', layout='centered')
-st.title('⚽ SIG Betting Model 3.3')
+st.title('⚽ SIG Betting Model 3.4')
 st.caption('Mobilvenlig analyse · Chrome på iPhone · Ingen automatiske væddemål')
 st.warning('Eksperimentel model: sandsynlighederne er ikke valideret som profitable. Minimumsodds bygger på en foreløbig usikkerhedsmargin.')
 
@@ -256,19 +256,50 @@ if hist:
             st.dataframe(df[display],use_container_width=True,hide_index=True)
             st.download_button('Download 30 kandidater (CSV)',to_csv(df.to_dict('records'),list(df.columns)),'sig_kandidater.csv','text/csv')
             if not odds: st.info('Ingen odds indlæst: disse er kandidater med modelberegnede minimumsodds, ikke godkendte væddemål.')
-        st.caption('Kort, hjørnespark, Opta/xG og automatisk bookmakerintegration er IKKE implementeret i 3.3. Seks ligaer via API; Superliga via CSV.')
+        st.caption('Kort, hjørnespark, Opta/xG og automatisk bookmakerintegration er IKKE implementeret i 3.4. Seks ligaer via API; Superliga via CSV.')
         st.subheader('5 · Historisk test')
-        if st.button('Kør kronologisk backtest'):
-            test_engine=Engine()
-            back=load_history(test_engine,hist,cutoff=asof,backtest=True)
-            if back:
-                bdf=pd.DataFrame(back)
-                st.metric('Testede kampe',len(bdf))
-                st.metric('Gennemsnitlig Brier-score',f'{bdf.brier.mean():.4f}')
-                st.metric('Gennemsnitlig log-loss',f'{bdf.logloss.mean():.4f}')
-                st.download_button('Download backtest (CSV)',to_csv(back,list(back[0])),'sig_backtest.csv','text/csv')
-                st.caption('Backtest måler prognosekvalitet, ikke profit. Ingen ROI uden tidskorrekte bookmakerodds.')
-            else: st.info('Ikke nok historik til backtest.')
+        st.caption('Kronologisk test: Modellen forudsiger hver kamp ud fra tidligere resultater, før den lærer kampens resultat. Brier og log-loss måler sandsynligheder, ikke gevinst.')
+        st.caption('Lavere score er bedre. Sammenligning med en simpel historisk liga-baseline er nødvendig; modellen er ikke dokumenteret bedre end markedet.')
+        if st.button('Kør kronologisk backtest', key='run_backtest'):
+            with st.spinner('Tester afsluttede kampe i datoorden…'):
+                test_engine=Engine()
+                back=load_history(test_engine,hist,cutoff=asof,backtest=True)
+                st.session_state['backtest_results']=back
+                st.session_state['backtest_signature']=(len(hist),asof.isoformat(),st.session_state.get('source_label',''))
+        back=st.session_state.get('backtest_results',[])
+        signature=(len(hist),asof.isoformat(),st.session_state.get('source_label',''))
+        if back and st.session_state.get('backtest_signature')!=signature:
+            st.warning('Kampdata eller analysedato er ændret siden sidste test. Kør backtest igen for aktuelle resultater.')
+        elif back:
+            bdf=pd.DataFrame(back)
+            st.metric('Historisk testede kampe',len(bdf))
+            st.metric('Gennemsnitlig Brier-score',f'{bdf.brier.mean():.4f}')
+            st.metric('Gennemsnitlig log-loss',f'{bdf.logloss.mean():.4f}')
+            st.caption('Kun kampe hvor begge hold har mindst 5 tidligere registrerede kampe medregnes. Testen anvender faktiske slutresultater, men ingen odds eller ROI.')
+            per_league=(bdf.groupby('league',as_index=False)
+                       .agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean'))
+                       .sort_values('league'))
+            per_league['brier']=per_league['brier'].round(4)
+            per_league['logloss']=per_league['logloss'].round(4)
+            st.markdown('**Resultater fordelt på liga**')
+            st.dataframe(per_league,hide_index=True,use_container_width=True)
+            st.markdown('**Kalibrering af hjemmesejre**')
+            st.caption('Hvis modellen siger 60–70 % hjemmesejr, bør omtrent 60–70 % af kampene i den gruppe faktisk ende med hjemmesejr. Små grupper er usikre.')
+            bins=[0,.1,.2,.3,.4,.5,.6,.7,.8,.9,1.000001]
+            calib=bdf.copy()
+            calib['interval']=pd.cut(calib['p1'],bins=bins,labels=[f'{int(bins[i]*100)}–{int(bins[i+1]*100)} %' for i in range(10)],include_lowest=True,right=False)
+            calib['hjemmesejr']=(calib['actual']=='1').astype(int)
+            cal=(calib.groupby('interval',observed=True)
+                 .agg(kampe=('hjemmesejr','size'),forudsagt=('p1','mean'),observeret=('hjemmesejr','mean'))
+                 .reset_index())
+            cal['forudsagt']=(cal['forudsagt']*100).round(1)
+            cal['observeret']=(cal['observeret']*100).round(1)
+            cal=cal.rename(columns={'interval':'Sandsynlighed','kampe':'Kampe','forudsagt':'Forudsagt %','observeret':'Faktisk %'})
+            st.dataframe(cal,hide_index=True,use_container_width=True)
+            st.download_button('Download historisk test (CSV)',to_csv(back,list(back[0])),'sig_backtest.csv','text/csv',key='download_backtest')
+            st.warning('Vigtigt: Dette er intern historisk test på det samme datamiljø, som bruges til udvikling. Det er ikke en uafhængig fremadrettet validering eller dokumentation for profitable spil.')
+        else:
+            st.info('Tryk på knappen for at teste historikken. Flere afsluttede kampe giver et mere pålideligt grundlag.')
     except Exception as e: st.error(f'Analysefejl: {e}')
 else:
     st.info('Start med at hente historiske kampe ovenfor. Intet er simuleret eller opdigtet.')
