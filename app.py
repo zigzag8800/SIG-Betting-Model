@@ -14,7 +14,7 @@ import streamlit as st
 from sig_model import Engine, load_history, value_rows
 
 st.set_page_config(page_title='SIG Betting Model', page_icon='⚽', layout='centered')
-st.title('⚽ SIG Betting Model 3.2')
+st.title('⚽ SIG Betting Model 3.3')
 st.caption('Mobilvenlig analyse · Chrome på iPhone · Ingen automatiske væddemål')
 st.warning('Eksperimentel model: sandsynlighederne er ikke valideret som profitable. Minimumsodds bygger på en foreløbig usikkerhedsmargin.')
 
@@ -83,13 +83,20 @@ with st.expander('1 · Datakilde',expanded=True):
         default_season=today.year if today.month>=7 else today.year-1
         seasons=st.multiselect('Sæsonernes startår',list(range(default_season-4,default_season+1)),default=[default_season-1,default_season])
         st.caption('Vælg helst 1–2 sæsoner ad gangen. Kun succesfulde API-svar caches i 6 timer. Superliga kræver CSV. Manglende adgang vises tydeligt.')
+        st.caption('Data fra tidligere vellykkede hentninger i denne browsersession bevares. API-cache gælder 6 timer.')
+        if st.button('Ryd indlæste kampdata', help='Fjerner kun kampdata i denne browsersession; ikke din API-nøgle.'):
+            for key in ('history','fixtures','loaded_combos','api_fetch_report'):
+                st.session_state.pop(key, None)
+            st.rerun()
         fetch=st.button('Hent kampdata',type='primary')
         if fetch:
             if not token or not chosen or not seasons:
                 st.error('Angiv API-nøgle, mindst én liga og en sæson.')
             else:
                 hist=[]; fixtures=[]; errors=[]; successful=[]; denied=[]; rate_limited=False
-                jobs=[(name, season) for name in chosen for season in sorted(seasons)]
+                loaded=st.session_state.setdefault('loaded_combos', {})
+                jobs=[(name, season) for name in chosen for season in sorted(seasons) if f'{LEAGUES[name]}:{season}' not in loaded]
+                skipped=len(chosen)*len(seasons)-len(jobs)
                 # Free football-data.org plans commonly allow 10 requests/minute.
                 # Limit this click to 8 requests to leave room for other clients.
                 max_requests=8
@@ -104,6 +111,7 @@ with st.expander('1 · Datakilde',expanded=True):
                             matches=api_matches(token,LEAGUES[name],season)
                             h,f=convert(matches,LEAGUES[name]); hist+=h; fixtures+=f
                             successful.append(f'{name} {season}: {len(h)} afsluttede, {len(f)} kommende')
+                            loaded[f'{LEAGUES[name]}:{season}']={'name':name,'season':season,'history':len(h),'fixtures':len(f)}
                         except ApiError as e:
                             if e.status==403:
                                 denied.append(f'{name} {season}')
@@ -127,18 +135,29 @@ with st.expander('1 · Datakilde',expanded=True):
                     st.session_state['history']=hist
                     st.session_state['fixtures']=fixtures
                     st.session_state['source_label']='football-data.org'
-                st.session_state['api_fetch_report']={'successful':successful,'denied':denied,'errors':errors}
+                st.session_state['api_fetch_report']={'successful':successful,'denied':denied,'errors':errors,'skipped':skipped}
+                if not jobs:
+                    st.info('Alle valgte ligaer/sæsoner er allerede indlæst i denne session.')
         report=st.session_state.get('api_fetch_report')
         if report:
-            if report['successful']:
-                st.success('Hentet: '+str(len(report['successful']))+' liga/sæson-kombinationer. '+str(len(st.session_state.get('history',[])))+' afsluttede og '+str(len(st.session_state.get('fixtures',[])))+' kommende kampe i hukommelsen.')
+            if report['successful'] or st.session_state.get('loaded_combos'):
+                st.success('I hukommelsen: '+str(len(st.session_state.get('loaded_combos',{})))+' liga/sæson-kombinationer. '+str(len(st.session_state.get('history',[])))+' afsluttede og '+str(len(st.session_state.get('fixtures',[])))+' kommende kampe.')
+                if report.get('skipped'):
+                    st.caption(f'{report["skipped"]} allerede indlæste kombinationer blev sprunget over uden nyt API-kald.')
                 with st.expander('Se præcis hvilke sæsoner der lykkedes'):
-                    st.write('\n\n'.join(report['successful']))
+                    st.write('\n\n'.join(report['successful']) if report['successful'] else 'Ingen nye hentninger i sidste forsøg.')
             if report['denied']:
                 st.warning('Ingen adgang (403), sprunget over: '+', '.join(report['denied']))
             if report['errors']:
                 st.warning('\n\n'.join(report['errors']))
-            st.caption('Et grønt antal betyder kun, at NOGLE data er hentet. Kontrollér listen over lykkede ligaer og sæsoner, før du stoler på kandidaterne.')
+            st.caption('Et grønt antal betyder kun, at NOGLE data er hentet. Kontrollér dækningen før analyse.')
+        if st.session_state.get('loaded_combos'):
+            with st.expander('Samlet datadækning (alle hentninger i denne session)', expanded=True):
+                coverage=sorted(st.session_state['loaded_combos'].values(), key=lambda x:(x['name'],x['season']))
+                st.dataframe(pd.DataFrame(coverage).rename(columns={'name':'Liga','season':'Sæson','history':'Afsluttede','fixtures':'Kommende'}),hide_index=True,use_container_width=True)
+                missing=[f'{n} {y}' for n in chosen for y in sorted(seasons) if f'{LEAGUES[n]}:{y}' not in st.session_state['loaded_combos']]
+                if missing: st.warning('Mangler blandt aktuelle valg: '+', '.join(missing))
+                else: st.success('Alle aktuelt valgte ligaer/sæsoner er indlæst.')
     else:
         hf=st.file_uploader('Historik: history.csv',type='csv',key='h')
         ff=st.file_uploader('Kommende kampe: fixtures.csv',type='csv',key='f')
@@ -237,7 +256,7 @@ if hist:
             st.dataframe(df[display],use_container_width=True,hide_index=True)
             st.download_button('Download 30 kandidater (CSV)',to_csv(df.to_dict('records'),list(df.columns)),'sig_kandidater.csv','text/csv')
             if not odds: st.info('Ingen odds indlæst: disse er kandidater med modelberegnede minimumsodds, ikke godkendte væddemål.')
-        st.caption('Kort, hjørnespark, Opta/xG og automatisk bookmakerintegration er IKKE implementeret i 3.1. Seks ligaer via API; Superliga via CSV.')
+        st.caption('Kort, hjørnespark, Opta/xG og automatisk bookmakerintegration er IKKE implementeret i 3.3. Seks ligaer via API; Superliga via CSV.')
         st.subheader('5 · Historisk test')
         if st.button('Kør kronologisk backtest'):
             test_engine=Engine()
