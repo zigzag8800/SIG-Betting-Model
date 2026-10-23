@@ -14,7 +14,7 @@ import streamlit as st
 from sig_model import Engine, load_history, value_rows
 
 st.set_page_config(page_title='SIG Betting Model', page_icon='⚽', layout='centered')
-st.title('⚽ SIG Betting Model 3.5')
+st.title('⚽ SIG Betting Model 3.6')
 st.caption('Mobilvenlig analyse · Chrome på iPhone · Ingen automatiske væddemål')
 st.warning('Eksperimentel model: sandsynlighederne er ikke valideret som profitable. Minimumsodds bygger på en foreløbig usikkerhedsmargin.')
 
@@ -206,13 +206,29 @@ with st.expander('3 · Analyseindstillinger'):
     min_games=st.slider('Mindst historiske kampe pr. hold',5,30,12)
     edge=st.slider('Mindste beregnede EV',0,20,4)/100
     margin=st.slider('Tillæg til minimumsodds (%)',0,10,3)/100
+    st.markdown('**Aktuel form (forsøg)**')
+    st.caption('Modstanderstyrkejusteret målforskel i de seneste fem kampe. Ingen xG, trænerstil eller opdigtede taktiske data. Standard er FRA, indtil uafhængig test dokumenterer en forbedring.')
+    use_form=st.checkbox('Aktivér forsigtig formjustering (eksperimentel)',value=False)
+    form_strength=0.16 if use_form else 0.0
+    st.caption('Managerskift registreres kun, hvis du uploader dokumenterede datoer. Ingen automatisk managerdata.')
+    manager_csv=st.file_uploader('Managerskift (valgfrit CSV: league,team,start_date)',type='csv',key='manager_csv')
+    manager_changes=[]
+    if manager_csv is not None:
+        try:
+            manager_changes=parse_upload(manager_csv,['league','team','start_date'])
+            for x in manager_changes: dt.date.fromisoformat(x['start_date'][:10])
+            st.caption(f'{len(manager_changes)} managerskift indlæst. Holdnavne skal matche kampdata nøjagtigt.')
+        except Exception as exc:
+            st.error(f'Ugyldigt managerskift-CSV: {exc}')
+            manager_changes=[]
+    st.download_button('Download managerskift-skabelon',to_csv([],['league','team','start_date']),'manager_changes_template.csv','text/csv')
 
 hist=st.session_state.get('history',[])
 fixtures=st.session_state.get('fixtures',[])
 odds=st.session_state.get('odds',[])
 if hist:
     try:
-        eng=Engine()
+        eng=Engine(form_strength=form_strength,manager_changes=manager_changes)
         load_history(eng,hist,cutoff=asof)
         candidates=value_rows(eng,fixtures,odds,asof,edge_min=edge,margin=margin,until=end,markets=markets)
         candidates=[r for r in candidates if r['date']>=start.isoformat()]
@@ -256,18 +272,19 @@ if hist:
             st.dataframe(df[display],use_container_width=True,hide_index=True)
             st.download_button('Download 30 kandidater (CSV)',to_csv(df.to_dict('records'),list(df.columns)),'sig_kandidater.csv','text/csv')
             if not odds: st.info('Ingen odds indlæst: disse er kandidater med modelberegnede minimumsodds, ikke godkendte væddemål.')
-        st.caption('Kort, hjørnespark, Opta/xG og automatisk bookmakerintegration er IKKE implementeret i 3.5. Seks ligaer via API; Superliga via CSV.')
+        st.caption('Trænerstil og matchup-profiler er IKKE implementeret; kort, hjørnespark, Opta/xG og automatisk bookmakerintegration er IKKE implementeret i 3.6. Seks ligaer via API; Superliga via CSV.')
         st.subheader('5 · Historisk test')
+        st.warning('Formjusteringen er IKKE valideret. Sammenlign på et uafhængigt tidsinterval, før den bruges til væddemål. Managerdata er kun brugerleverede.')
         st.caption('Kronologisk test: Modellen forudsiger hver kamp ud fra tidligere resultater, før den lærer kampens resultat. Brier og log-loss måler sandsynligheder, ikke gevinst.')
         st.caption('Lavere score er bedre. Sammenligningen er mod en simpel historisk liga-baseline, ikke mod bookmakerodds.')
         if st.button('Kør kronologisk backtest', key='run_backtest'):
             with st.spinner('Tester afsluttede kampe i datoorden…'):
-                test_engine=Engine()
+                test_engine=Engine(form_strength=form_strength,manager_changes=manager_changes)
                 back=load_history(test_engine,hist,cutoff=asof,backtest=True)
                 st.session_state['backtest_results']=back
-                st.session_state['backtest_signature']=(len(hist),asof.isoformat(),st.session_state.get('source_label',''))
+                st.session_state['backtest_signature']=(len(hist),asof.isoformat(),st.session_state.get('source_label',''),form_strength,tuple((r['league'],r['team'],r['start_date']) for r in manager_changes))
         back=st.session_state.get('backtest_results',[])
-        signature=(len(hist),asof.isoformat(),st.session_state.get('source_label',''))
+        signature=(len(hist),asof.isoformat(),st.session_state.get('source_label',''),form_strength,tuple((r['league'],r['team'],r['start_date']) for r in manager_changes))
         if back and st.session_state.get('backtest_signature')!=signature:
             st.warning('Kampdata eller analysedato er ændret siden sidste test. Kør backtest igen for aktuelle resultater.')
         elif back:
@@ -277,7 +294,7 @@ if hist:
             st.metric('Gennemsnitlig log-loss',f'{bdf.logloss.mean():.4f}')
             st.markdown('**Sammenligning med simpel liga-baseline**')
             comparison=pd.DataFrame([
-                {'Metode':'SIG Model 3.5','Brier':bdf.brier.mean(),'Log-loss':bdf.logloss.mean()},
+                {'Metode':'SIG Model 3.6','Brier':bdf.brier.mean(),'Log-loss':bdf.logloss.mean()},
                 {'Metode':'Historisk ligafordeling','Brier':bdf.baseline_brier.mean(),'Log-loss':bdf.baseline_logloss.mean()},
             ])
             st.dataframe(comparison.round(4),hide_index=True,use_container_width=True)

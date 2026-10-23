@@ -22,9 +22,16 @@ def pois(lam, n): return math.exp(-lam)*lam**n/math.factorial(n)
 def clip(x,lo,hi): return max(lo,min(hi,x))
 
 class Engine:
-    def __init__(self, half_life=180, home_adv=0.16, elo_k=20):
+    def __init__(self, half_life=180, home_adv=0.16, elo_k=20, form_strength=0.0, manager_changes=None):
         self.games=defaultdict(list); self.elo=defaultdict(lambda:1500.0)
         self.half_life=half_life; self.home_adv=home_adv; self.elo_k=elo_k
+        self.form_strength=clip(float(form_strength),0.0,0.25)
+        self.manager_changes={}
+        for row in (manager_changes or []):
+            key=(row["league"],row["team"])
+            d=date(row["start_date"])
+            self.manager_changes.setdefault(key,[]).append(d)
+        for changes in self.manager_changes.values(): changes.sort()
     def _key(self, league, team): return (league,team)
     def _weighted(self, league, team, today, at_home):
         games=self.games[self._key(league,team)]
@@ -37,6 +44,28 @@ class Engine:
             weights.append(w); gf.append(g['gf']*w); ga.append(g['ga']*w)
         if not weights: return 1.35,1.35,0
         return sum(gf)/sum(weights),sum(ga)/sum(weights),len(weights)
+    def form_profile(self, league, team, today, last_n=5):
+        """Opponent-adjusted goal difference in last N prior matches.
+
+        This is a conservative proxy from final scores, NOT measured xG or tactics.
+        Elo opponent strength is captured before each historical match is played.
+        """
+        previous=[g for g in self.games[self._key(league,team)] if g['date'] < today]
+        changes=[d for d in self.manager_changes.get((league,team),[]) if d <= today]
+        if changes:
+            previous=[g for g in previous if g['date'] >= changes[-1]]
+        recent=sorted(previous,key=lambda g:g['date'],reverse=True)[:last_n]
+        if not recent:
+            return {'games':0,'form':0.0,'goal_diff':0.0,'manager_reset':bool(changes)}
+        # Expected goal difference proxy: opponent Elo advantage / 500.
+        # Keep weighting mild to avoid overreacting to a handful of results.
+        values=[clip(g['gf']-g['ga']-(g.get('elo_for',1500)-g.get('elo_against',1500))/500,-4,4) for g in recent]
+        avg=sum(values)/len(values)
+        reliability=len(values)/(len(values)+7)
+        return {'games':len(recent),'form':clip(avg*reliability,-1.0,1.0),
+                'goal_diff':sum(g['gf']-g['ga'] for g in recent)/len(recent),
+                'manager_reset':bool(changes)}
+
     def expected_goals(self,league,home,away,today):
         hgf,hga,nh=self._weighted(league,home,today,True)
         agf,aga,na=self._weighted(league,away,today,False)
@@ -48,6 +77,13 @@ class Engine:
         # modest Elo adjustment; avoids double-counting results too strongly
         lh=clip(math.sqrt(max(0.05,hgf*aga))*math.exp(self.home_adv/2+0.12*er),0.25,3.7)
         la=clip(math.sqrt(max(0.05,agf*hga))*math.exp(-self.home_adv/2-0.12*er),0.20,3.5)
+        if self.form_strength:
+            fh=self.form_profile(league,home,today)
+            fa=self.form_profile(league,away,today)
+            # No arbitrary unbounded probability shocks: capped, symmetric log-goal shift.
+            change=clip(self.form_strength*(fh['form']-fa['form'])/2,-0.20,0.20)
+            lh=clip(lh*math.exp(change),0.25,3.7)
+            la=clip(la*math.exp(-change),0.20,3.5)
         return lh,la,min(nh,na)
     def predict(self,league,home,away,today,rho=-0.08):
         lh,la,n=self.expected_goals(league,home,away,today)
@@ -83,8 +119,8 @@ class Engine:
         delta=self.elo_k*(actual-expectation)
         self.elo[self._key(league,home)]+=delta
         self.elo[self._key(league,away)]-=delta
-        self.games[self._key(league,home)].append({'date':today,'home':True,'gf':hg,'ga':ag})
-        self.games[self._key(league,away)].append({'date':today,'home':False,'gf':ag,'ga':hg})
+        self.games[self._key(league,home)].append({'date':today,'home':True,'gf':hg,'ga':ag,'elo_for':eh,'elo_against':ea})
+        self.games[self._key(league,away)].append({'date':today,'home':False,'gf':ag,'ga':hg,'elo_for':ea,'elo_against':eh})
 
 def load_history(engine, rows, cutoff=None, backtest=False):
     """Walk chronologically, withholding *all* same-date results until predictions finish.
