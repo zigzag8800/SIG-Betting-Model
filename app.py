@@ -1,5 +1,6 @@
 """SIG Betting Model: mobile Streamlit UI; no wagers and no bookmaker scraping."""
 import csv
+import base64
 import datetime as dt
 import io
 import os
@@ -51,6 +52,47 @@ def api_matches(token, league, season):
         raise ApiError(e.code, body, e.headers.get('Retry-After')) from e
     except Exception as e:
         raise RuntimeError(f'Kunne ikke hente {league}/{season}: {e}') from e
+
+def save_backtest_to_github(rows, asof, form_strength):
+    """Save the latest completed backtest through a narrowly scoped GitHub token.
+
+    Configure BACKTEST_GITHUB_TOKEN in Streamlit Secrets. No token is placed
+    in source code or exported CSV files.
+    """
+    token=st.secrets.get('BACKTEST_GITHUB_TOKEN','')
+    if not token:
+        return False, 'Opsæt BACKTEST_GITHUB_TOKEN i Streamlit Secrets for automatisk GitHub-lagring.'
+    if not rows:
+        return False, 'Ingen testkampe at gemme.'
+    path='reports/latest_backtest.csv'
+    url='https://api.github.com/repos/zigzag8800/SIG-Betting-Model/contents/'+path
+    headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json',
+             'X-GitHub-Api-Version':'2022-11-28','User-Agent':'SIG-Betting-Model'}
+    sha=None
+    try:
+        req=urllib.request.Request(url,headers=headers)
+        with urllib.request.urlopen(req,timeout=20) as response:
+            sha=json.load(response).get('sha')
+    except urllib.error.HTTPError as exc:
+        if exc.code!=404:
+            return False, f'GitHub kunne ikke læse eksisterende fil (HTTP {exc.code}).'
+    except Exception as exc:
+        return False, f'GitHub-forbindelse fejlede: {exc}'
+    payload={'message':f'Update backtest results (as of {asof})',
+             'content':base64.b64encode(to_csv(rows,list(rows[0]))).decode('ascii')}
+    if sha:
+        payload['sha']=sha
+    req=urllib.request.Request(url,data=json.dumps(payload).encode('utf-8'),
+                               headers={**headers,'Content-Type':'application/json'},method='PUT')
+    try:
+        with urllib.request.urlopen(req,timeout=30) as response:
+            json.load(response)
+        return True, 'Backtest gemt i GitHub: reports/latest_backtest.csv'
+    except urllib.error.HTTPError as exc:
+        return False, f'GitHub afviste lagring (HTTP {exc.code}). Kontrollér token og Contents: Read and write.'
+    except Exception as exc:
+        return False, f'Kunne ikke gemme backtest: {exc}'
+
 
 class ApiError(Exception):
     def __init__(self, status, message, retry_after=None):
@@ -284,8 +326,17 @@ if hist:
                 test_engine=Engine(form_strength=form_strength,manager_changes=manager_changes)
                 back=load_history(test_engine,hist,cutoff=asof,backtest=True)
                 st.session_state['backtest_results']=back
+                saved,message=save_backtest_to_github(back,asof.isoformat(),form_strength)
+                st.session_state['backtest_save_message']=(saved,message)
                 st.session_state['backtest_signature']=(len(hist),asof.isoformat(),st.session_state.get('source_label',''),form_strength,tuple((r['league'],r['team'],r['start_date']) for r in manager_changes))
         back=st.session_state.get('backtest_results',[])
+        if 'backtest_save_message' in st.session_state:
+            saved,message=st.session_state['backtest_save_message']
+            if saved:
+                st.success(message)
+                st.link_button('Se seneste backtest på GitHub','https://github.com/zigzag8800/SIG-Betting-Model/blob/main/reports/latest_backtest.csv')
+            else:
+                st.info(message)
         signature=(len(hist),asof.isoformat(),st.session_state.get('source_label',''),form_strength,tuple((r['league'],r['team'],r['start_date']) for r in manager_changes))
         if back and st.session_state.get('backtest_signature')!=signature:
             st.warning('Kampdata eller analysedato er ændret siden sidste test. Kør backtest igen for aktuelle resultater.')
