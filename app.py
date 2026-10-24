@@ -657,7 +657,7 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
             suggested=season_starts[-1]
         else:
             suggested=dates[min(len(dates)-1,int(len(dates)*0.75))]
-        boundary=st.date_input('Første testdato',value=suggested,min_value=first,max_value=last,key='league_test_start')
+        boundary=st.date_input('Første testdato',value=suggested,min_value=first,max_value=last,key='league_test_start_39_v2')
         train_count=sum(d<boundary for d in dates)
         test_count=sum(d>=boundary for d in dates)
         st.caption(f'Træningskampe før {boundary.isoformat()}: {train_count}. Testkampe fra og med datoen: {test_count}. Testen bruger kun tidligere kampresultater.')
