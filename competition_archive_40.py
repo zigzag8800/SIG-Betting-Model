@@ -21,12 +21,25 @@ def convert_research_matches(matches, competition):
             continue
         if not str(mid).strip() or not str(hid).strip() or not str(aid).strip():
             continue
+        score=(m.get('score') or {}).get('fullTime') or {}
+        finished=str(m.get('status') or '').upper()=='FINISHED'
+        home_goals=score.get('home') if finished else None
+        away_goals=score.get('away') if finished else None
+        if finished and (home_goals is None or away_goals is None):
+            continue
+        if finished:
+            try:
+                home_goals=int(home_goals);away_goals=int(away_goals)
+                if home_goals<0 or away_goals<0:continue
+            except (ValueError,TypeError):
+                continue
         result.append({
             'match_id':str(mid),'competition':competition,
             'home_team_id':str(hid),'away_team_id':str(aid),
             'home':home.get('name') or '', 'away':away.get('name') or '',
             'kickoff_utc':kickoff,'date':str(kickoff)[:10],
             'status':m.get('status') or '',
+            'home_goals':home_goals,'away_goals':away_goals,
             'source':'football-data.org',
             'known_at':None
         })
@@ -52,6 +65,12 @@ def merge_research_matches(existing,incoming):
         if any(str(previous.get(f))!=str(row.get(f)) for f in identity):
             conflicts.append({'reason':'conflicting identity','key':key})
             continue
+        # A finished match result may legitimately arrive after a scheduled
+        # fixture. Never replace a known result with a blank score.
+        if str(previous.get('status','')).upper()=='FINISHED' and str(row.get('status','')).upper()=='FINISHED':
+            if previous.get('home_goals') is not None and row.get('home_goals') is not None and (previous.get('home_goals'),previous.get('away_goals'))!=(row.get('home_goals'),row.get('away_goals')):
+                conflicts.append({'reason':'conflicting result','key':key})
+                continue
         # Historical publication timestamps cannot be inferred by an update.
         # Empty fields and unknown historical timestamps must never erase
         # values already documented in the archive.
