@@ -113,6 +113,9 @@ def session_api_matches(token,league,season):
     return api_matches(token,league,season)
 
 def api_matches(token, league, season):
+    token=token.strip()
+    if not token:
+        raise ApiError(401,'API-nøglen er tom.')
     resource=f'{league}:{season}'
     scope=hashlib.sha256(token.encode()).hexdigest()[:20]
     cache_key=f'{scope}:{resource}'
@@ -192,6 +195,7 @@ class ApiError(Exception):
         super().__init__(message)
         self.status=status
         self.retry_after=retry_after
+        self.authentication_failed=status==401 or (status==400 and 'token is invalid' in message.lower())
 
 
 def convert(matches, league):
@@ -253,7 +257,7 @@ with st.expander('1 · Datakilde',expanded=True):
                                 errors.append(f'API-grænse nået (429). Resterende kald stoppet. Vent mindst {e.retry_after or "60"} sekunder og tryk igen for kun at hente manglende sæsoner.')
                                 rate_limited=True
                                 break
-                            elif e.status==401:
+                            elif e.authentication_failed:
                                 errors.append('API-nøglen blev afvist (401). Kontrollér nøglen i Streamlit Secrets.')
                                 break
                             else:
@@ -592,6 +596,7 @@ with st.expander('7 · Bookmaker-laboratorium 3.8', expanded=False):
             st.caption(f'Sprunget over: {excluded["no_odds"]//2} kampe uden gyldige odds og {excluded["opening_only"]//2} kun med opening odds.')
 
 st.divider()
+st.caption('Football data provided by the Football-Data.org API')
 st.caption('SIG Model · Kun analyse · Ingen automatiske spil · Opta, kort, hjørnespark og live bookmakerodds er endnu ikke integreret.')
 
 if STORE:

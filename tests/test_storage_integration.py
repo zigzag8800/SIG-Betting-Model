@@ -56,6 +56,17 @@ class ArchiveTests(unittest.TestCase):
             with self.assertRaises(ns['ApiError']): ns['api_matches']('test-key','PL',2026)
         store.finish.assert_called_once_with(7,'HTTP 429',120);store.put.assert_not_called()
 
+    def test_invalid_token_is_authentication_failure_even_with_http_400(self):
+        ns=functions()
+        self.assertTrue(ns['ApiError'](400,'{"message":"Your API token is invalid.","errorCode":400}').authentication_failed)
+        self.assertFalse(ns['ApiError'](400,'Unknown season').authentication_failed)
+
+    def test_empty_token_stops_before_network_or_reservation(self):
+        ns=functions(); ns['STORE']=Mock()
+        with patch('urllib.request.urlopen') as request:
+            with self.assertRaises(ns['ApiError']): ns['api_matches']('   ','PL',2026)
+            request.assert_not_called(); ns['STORE'].reserve.assert_not_called()
+
     def test_convert_preserves_model_input(self):
         ns=functions()
         history,fixtures=ns['convert']([{'utcDate':'2026-10-20T12:00:00Z','homeTeam':{'name':'H'},'awayTeam':{'name':'A'},'status':'FINISHED','score':{'fullTime':{'home':2,'away':1}}}],'PL')
