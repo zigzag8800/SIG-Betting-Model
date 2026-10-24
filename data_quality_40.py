@@ -47,9 +47,19 @@ def validate_identity_data(players,memberships,appearances):
         for prev,cur in zip(intervals,intervals[1:]):
             if cur[0]<prev[1] and cur[2]!=prev[2]:
                 raise ValueError('Overlappende klubtilhørsforhold: '+str(pid))
+    seen_appearances=set()
     for appearance in appearances:
-        if appearance['player_id'] not in known:raise ValueError('Ukendt spiller i spillerkamp')
-        if not appearance.get('match_id'):raise ValueError('Mangler match_id')
+        pid=appearance['player_id']
+        if pid not in known:raise ValueError('Ukendt spiller i spillerkamp')
+        match_id=appearance.get('match_id')
+        if not match_id:raise ValueError('Mangler match_id')
+        key=(pid,match_id)
+        if key in seen_appearances:raise ValueError('Dubleret spillerkamp: '+str(key))
+        seen_appearances.add(key)
+        if not appearance.get('date') or not appearance.get('known_at'):
+            raise ValueError('Spillerkamp mangler dato eller kendt-tidspunkt')
+        played=day(appearance['date']);known_at=day(appearance['known_at'])
+        if known_at<played:raise ValueError('Spilleres spilleminutter kan ikke være kendt før kampdatoen')
         minute=int(appearance['minutes'])
         if minute<0 or minute>150:raise ValueError('Ugyldigt antal minutter')
     return True
