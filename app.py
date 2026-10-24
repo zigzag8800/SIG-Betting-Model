@@ -217,7 +217,14 @@ def convert(matches, league):
         home=m.get('homeTeam') or {}; away=m.get('awayTeam') or {}
         h=home.get('name'); a=away.get('name'); d=(m.get('utcDate') or '')[:10]
         if not (h and a and d): continue
-        base={'date':d,'league':league,'home':h,'away':a}
+        # Preserve provider identity/time fields without inventing a historical
+        # publication timestamp. Ingest time is NOT equivalent to known_at.
+        base={'date':d,'league':league,'home':h,'away':a,
+              'match_id':str(m['id']) if m.get('id') is not None else '',
+              'home_team_id':str(home['id']) if home.get('id') is not None else '',
+              'away_team_id':str(away['id']) if away.get('id') is not None else '',
+              'kickoff_utc':m.get('utcDate') or '',
+              'source':'football-data.org'}
         score=(m.get('score') or {}).get('fullTime') or {}
         if m.get('status')=='FINISHED' and score.get('home') is not None and score.get('away') is not None:
             history.append({**base,'home_goals':score['home'],'away_goals':score['away']})
