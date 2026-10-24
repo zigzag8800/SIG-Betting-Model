@@ -75,6 +75,9 @@ def merge_research_matches(existing,incoming):
         # Empty fields and unknown historical timestamps must never erase
         # values already documented in the archive.
         updated={**previous,**{k:v for k,v in row.items() if v is not None and v!=''}}
+        # Out-of-order cached fixture updates must not downgrade final results.
+        if str(previous.get('status','')).upper()=='FINISHED' and str(row.get('status','')).upper()!='FINISHED':
+            updated['status']=previous['status']
         index[key]=updated
     return list(index.values()),conflicts
 
