@@ -1,5 +1,7 @@
 # Kampstatus, flytninger og resultatkorrektioner – 24. oktober 2026
 
+**Opfølgning:** [90-minuttersrettelsen er nu gennemført og verificeret](regular_time_correction_2026-10-24.md). Nedenstående beskriver fundet og tilstanden før rettelsen.
+
 ## Leveret og testet
 
 Ny kontrol i SIG 4.0-afsnittet under PostgreSQL-audit sammenligner allerede gemt

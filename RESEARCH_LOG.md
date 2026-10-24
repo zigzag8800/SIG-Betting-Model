@@ -77,3 +77,16 @@ miste historik eller skabe dubletter, og er fullTime altid et 90-minutters resul
 - Reproduceret fund: match 557838, Southampton–Middlesbrough, EXTRA_TIME 2–1 og
   regularTime 0–0 i den eksisterende cache. Det aktive 2–1-resultat er ikke ændret.
   [Rapport og kilder](reports/match_lifecycle_2026-10-24.md) angiver test- og livebevis.
+
+## 24. oktober 2026 – anvendt 90-minutters korrektion
+
+Brugeren godkendte at anvende 0–0 med bevaret original og forældelsesmarkering.
+De allerede gennemgåede primærkilder om regularTime/fullTime og 1X2-markedets
+90 minutter plus tillægstid bruges fortsat; ingen ny modelhypotese eller kilde-
+beretning var nødvendig. Feltkontrakten blev implementeret, ikke udledt af fora.
+
+Rettelsen er nu anvendt og verificeret mod en ny PostgreSQL-læsning: original
+2–1 i tidligere workspace, aktivt 0–0, kildebevis bevaret, gammel backtest stale.
+117 tests og grøn CI #63, inklusive appforløb med både vellykket commit og
+samtidighedsfejl. Se [rapport og kildebevis](reports/regular_time_correction_2026-10-24.md).
+Der er ikke kørt nye leverandørkald, ny modeloptimering eller en ny backtest her.

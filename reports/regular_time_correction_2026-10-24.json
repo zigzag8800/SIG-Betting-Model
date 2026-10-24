@@ -1,0 +1,201 @@
+{
+  "generated_at": "2026-10-24T11:43:27.757326+00:00",
+  "data_corrections": [
+    {
+      "id": "ffb38e269e1db96a29df209667de918f14f256830fc15a2c4ad9eee784926d9d",
+      "after": {
+        "away": "Middlesbrough FC",
+        "date": "2026-05-12",
+        "home": "Southampton FC",
+        "league": "ELC",
+        "season": "2025",
+        "source": "football-data.org",
+        "status": "FINISHED",
+        "match_id": "557838",
+        "away_goals": 0,
+        "home_goals": 0,
+        "kickoff_utc": "2026-05-12T19:00:00Z",
+        "away_team_id": "343",
+        "home_team_id": "340",
+        "result_scope": "REGULAR_TIME",
+        "score_duration": "EXTRA_TIME",
+        "regular_time_away_goals": 0,
+        "regular_time_home_goals": 0,
+        "regular_time_source_hash": "eba2be3f50b8747d8141cf24d38ea71ce13c6b7c967d735067a851a4271b8df1",
+        "provider_full_time_away_goals": 1,
+        "provider_full_time_home_goals": 2
+      },
+      "before": {
+        "away": "Middlesbrough FC",
+        "date": "2026-05-12",
+        "home": "Southampton FC",
+        "league": "ELC",
+        "season": "2025",
+        "source": "football-data.org",
+        "status": "FINISHED",
+        "match_id": "557838",
+        "away_goals": 1,
+        "home_goals": 2,
+        "kickoff_utc": "2026-05-12T19:00:00Z",
+        "away_team_id": "343",
+        "home_team_id": "340"
+      },
+      "reason": "90-minute 1X2 result from archived provider regularTime; extra time excluded",
+      "source": "football-data.org",
+      "evidence": {
+        "away": "Middlesbrough FC",
+        "date": "2026-05-12",
+        "home": "Southampton FC",
+        "stage": "PLAYOFFS",
+        "league": "ELC",
+        "season": "2025",
+        "source": "football-data.org",
+        "status": "FINISHED",
+        "match_id": "557838",
+        "away_goals": 1,
+        "home_goals": 2,
+        "kickoff_utc": "2026-05-12T19:00:00Z",
+        "away_team_id": "343",
+        "home_team_id": "340",
+        "score_duration": "EXTRA_TIME",
+        "provider_updated_at": "2026-05-13T09:04:58Z",
+        "regular_time_away_goals": 0,
+        "regular_time_home_goals": 0
+      },
+      "match_id": "557838",
+      "corrected_at": "2026-10-24T11:40:54.183434+00:00",
+      "invalidated_analyses": [
+        "backtest_results",
+        "lab_rows"
+      ],
+      "previous_workspace_hash": "0a51e0a086c010b530f7c8c75a34de10a89baa66a60e1b2f72f014e2031f2799"
+    }
+  ],
+  "correction_checks": [
+    {
+      "id": "ffb38e269e1db96a29df209667de918f14f256830fc15a2c4ad9eee784926d9d",
+      "source": "football-data.org",
+      "match_id": "557838",
+      "corrected_at": "2026-10-24T11:40:54.183434+00:00",
+      "before_score": [
+        2,
+        1
+      ],
+      "after_score": [
+        0,
+        0
+      ],
+      "previous_workspace_present": true,
+      "previous_result_preserved": true,
+      "current_result_matches_record": true
+    }
+  ],
+  "analysis_status": {
+    "backtest_results": "stale"
+  },
+  "inventory": [
+    {
+      "kind": "api_matches",
+      "records": 12,
+      "bytes": 579843
+    },
+    {
+      "kind": "diagnostic",
+      "records": 2,
+      "bytes": 276
+    },
+    {
+      "kind": "imported_backtest",
+      "records": 1,
+      "bytes": 301776
+    },
+    {
+      "kind": "provider_bundle",
+      "records": 1,
+      "bytes": 1387417
+    },
+    {
+      "kind": "source_csv",
+      "records": 6,
+      "bytes": 603214
+    },
+    {
+      "kind": "workspace",
+      "records": 1,
+      "bytes": 1469967
+    },
+    {
+      "kind": "workspace_version",
+      "records": 10,
+      "bytes": 5799275
+    }
+  ],
+  "versions": [
+    {
+      "saved_at": "2026-10-24 05:55:46.870816+00:00",
+      "history": 0,
+      "fixtures": 0,
+      "research": 0
+    },
+    {
+      "saved_at": "2026-10-24 06:03:43.140974+00:00",
+      "history": 0,
+      "fixtures": 0,
+      "research": 0
+    },
+    {
+      "saved_at": "2026-10-24 06:11:58.959950+00:00",
+      "history": 0,
+      "fixtures": 0,
+      "research": 0
+    },
+    {
+      "saved_at": "2026-10-24 06:18:19.575756+00:00",
+      "history": 380,
+      "fixtures": 0,
+      "research": 0
+    },
+    {
+      "saved_at": "2026-10-24 06:21:58.287359+00:00",
+      "history": 2792,
+      "fixtures": 1819,
+      "research": 0
+    },
+    {
+      "saved_at": "2026-10-24 06:22:30.099805+00:00",
+      "history": 2792,
+      "fixtures": 1819,
+      "research": 0
+    },
+    {
+      "saved_at": "2026-10-24 06:34:41.534907+00:00",
+      "history": 2792,
+      "fixtures": 1819,
+      "research": 0
+    },
+    {
+      "saved_at": "2026-10-24 06:35:44.923730+00:00",
+      "history": 2792,
+      "fixtures": 1819,
+      "research": 0
+    },
+    {
+      "saved_at": "2026-10-24 10:45:05.640540+00:00",
+      "history": 2792,
+      "fixtures": 1819,
+      "research": 0
+    },
+    {
+      "saved_at": "2026-10-24 11:40:54.827252+00:00",
+      "history": 2792,
+      "fixtures": 1819,
+      "research": 0
+    }
+  ],
+  "lifecycle_summary": {
+    "unchanged": 4610,
+    "administrative_record": 2,
+    "verified_regular_time": 1
+  },
+  "source_export_sha256": "b1663aa85abb8cb15ad3932c8d20c0b5fec9587251d328303e1f620950652129"
+}
