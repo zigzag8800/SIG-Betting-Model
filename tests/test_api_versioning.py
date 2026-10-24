@@ -19,7 +19,7 @@ class ApiVersioningTests(unittest.TestCase):
         self.assertEqual(len(calls),4)
         self.assertIn('pg_advisory_xact_lock',calls[0].args[0])
         self.assertIn('api_matches_version',calls[2].args[0])
-        self.assertIn('ON CONFLICT(kind,key) DO NOTHING',calls[1].args[0])
+        self.assertIn('ON CONFLICT(kind,key) DO NOTHING',calls[2].args[0])
         self.assertIn('api_matches',calls[3].args[0])
         self.assertIn('DO UPDATE',calls[3].args[0])
         self.assertEqual(digest,content_key(matches))
