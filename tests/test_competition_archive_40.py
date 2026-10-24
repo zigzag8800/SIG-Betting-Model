@@ -5,7 +5,7 @@ class CompetitionArchiveTests(unittest.TestCase):
     def fixture(self):
         return {'id':99,'utcDate':'2026-10-24T19:00:00Z',
                 'homeTeam':{'id':100,'name':'Club A'},'awayTeam':{'id':200,'name':'Club B'},
-                'status':'FINISHED'}
+                'status':'FINISHED','score':{'fullTime':{'home':2,'away':1}}}
 
     def test_requires_verified_ids(self):
         valid=convert_research_matches([self.fixture()],'CL')
@@ -51,6 +51,28 @@ class CompetitionArchiveTests(unittest.TestCase):
         merged,issues=merge_research_matches(old,incoming)
         self.assertFalse(issues)
         self.assertEqual(merged[0]['home'],'Club A')
+
+    def test_finished_result_requires_valid_scores(self):
+        match=self.fixture()
+        self.assertEqual(convert_research_matches([match],'CL')[0]['home_goals'],2)
+        missing={**match,'score':{'fullTime':{'home':None,'away':1}}}
+        self.assertEqual(convert_research_matches([missing],'CL'),[])
+
+    def test_conflicting_final_score_is_reported(self):
+        old=convert_research_matches([self.fixture()],'CL')
+        changed=[{**old[0],'home_goals':4}]
+        merged,issues=merge_research_matches(old,changed)
+        self.assertEqual(merged[0]['home_goals'],2)
+        self.assertEqual(len(issues),1)
+
+    def test_scheduled_game_gains_finished_score(self):
+        scheduled={**self.fixture(),'status':'SCHEDULED','score':{}}
+        early=convert_research_matches([scheduled],'CL')
+        late=convert_research_matches([self.fixture()],'CL')
+        merged,issues=merge_research_matches(early,late)
+        self.assertFalse(issues)
+        self.assertEqual(merged[0]['home_goals'],2)
+        self.assertEqual(merged[0]['status'],'FINISHED')
 
     def test_coverage_is_diagnostic(self):
         rows=convert_research_matches([self.fixture()],'CL')
