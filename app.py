@@ -11,7 +11,7 @@ import urllib.request
 import json
 import hashlib
 import hmac
-from persistent_store import Store, StorageError, content_key
+from persistent_store import Store, StorageError, content_key, verify_store
 
 import pandas as pd
 import streamlit as st
@@ -605,6 +605,16 @@ if STORE:
         with st.expander('Permanent arkiv · downloadhistorik'):
             st.caption('Råfiler, indlæste data og testresultater bevares efter genstart. Historiske downloads er fortsat deaktiveret, indtil leverandørvilkår og tidligere hentninger er afklaret.')
             st.dataframe(pd.DataFrame(STORE.log()),hide_index=True)
+            if st.button('Kontrollér arkiv uden datadownload',key='verify_archive'):
+                try:
+                    with st.spinner('Kontrollerer databasen med separate testposter…'):
+                        verify_store(STORE)
+                    st.success('Arkivkontrol bestået: skrivning, læsning fra ny forbindelse, kvote, ventetid og samtidige kald. Ingen leverandørdownloads.')
+                except Exception:
+                    st.error('Arkivkontrollen fejlede. Ingen leverandørdownloads udført.')
+            latest_check=STORE.get('diagnostic','latest')
+            if latest_check:
+                st.caption('Seneste beståede arkivkontrol: '+latest_check['checked_at'])
     except StorageError as exc:
         st.error(str(exc))
     except Exception:

@@ -94,3 +94,47 @@ class Store:
 def content_key(payload):
     return hashlib.sha256(json.dumps(payload,sort_keys=True,default=str).encode()).hexdigest()
 
+
+def verify_store(store):
+    """Exercise real SQL through fresh connections, without provider HTTP calls.
+
+    Uses separate, uniquely named diagnostic records; existing user data and
+    provider download budgets are never modified.
+    """
+    import uuid
+    from concurrent.futures import ThreadPoolExecutor
+    marker=uuid.uuid4().hex
+    other=Store(store.dsn)
+    payload={'marker':marker,'purpose':'storage verification'}
+    store.put('diagnostic',marker,payload)
+    if other.get('diagnostic',marker)!=payload:
+        raise StorageError('Læsning fra en ny databaseforbindelse fejlede.')
+    provider='diagnostic:'+marker
+    first=store.reserve(provider,'quota-test',minimum_seconds=0,weekly_limit=1)
+    try:
+        other.reserve(provider,'quota-test',minimum_seconds=0,weekly_limit=1)
+    except StorageError:
+        pass
+    else:
+        raise StorageError('Den fælles downloadkvote blev ikke håndhævet.')
+    store.finish(first,'diagnostic',cooldown=60)
+    try:
+        other.reserve(provider,'cooldown-test',minimum_seconds=0)
+    except StorageError:
+        pass
+    else:
+        raise StorageError('Ventetiden blev ikke bevaret på tværs af forbindelser.')
+    def competing_request(_):
+        try:
+            other.reserve(provider+':concurrent','lock-test',minimum_seconds=0,weekly_limit=1)
+            return True
+        except StorageError:
+            return False
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        if sum(pool.map(competing_request,range(2)))!=1:
+            raise StorageError('Samtidige kald kunne omgå downloadgrænsen.')
+    report={'checked_at':dt.datetime.now(dt.timezone.utc).isoformat(),
+            'read_write':True,'new_connection':True,'weekly_quota':True,
+            'cooldown':True,'concurrent_lock':True,'provider_downloads':0}
+    store.put('diagnostic','latest',report)
+    return report
