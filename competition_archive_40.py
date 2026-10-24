@@ -5,7 +5,7 @@ Does not download provider data or change production forecasts.
 """
 from collections import defaultdict
 
-RESEARCH_COMPETITIONS=frozenset(('CL','EL','ECL','EC','WC','WCQ','NL'))
+RESEARCH_COMPETITIONS=frozenset(('CL','EL','UCL','EC','WC','QUFA'))
 
 def convert_research_matches(matches, competition):
     """Normalize supported provider response fields without inventing known_at."""
