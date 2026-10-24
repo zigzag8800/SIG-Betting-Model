@@ -18,4 +18,19 @@ class IdentityAuditTests(unittest.TestCase):
         self.assertEqual(sa['Ugyldigt resultat'],2)
         self.assertEqual(sa['Ugyldigt/manglende UTC-kickoff'],0)
 
+    def test_conflicting_provider_id_is_flagged(self):
+        row={'league':'PL','source':'football-data.org','match_id':'9',
+             'date':'2026-10-24','home':'Home','away':'Away',
+             'home_team_id':'1','away_team_id':'2','kickoff_utc':'2026-10-24T12:00:00Z',
+             'home_goals':1,'away_goals':0}
+        other={**row,'away_team_id':'3','away':'Other'}
+        summary=next(x for x in audit_match_identity([row,other]) if x['Liga']=='PL')
+        self.assertEqual(summary['Modstridende kilde-kamp-ID'],1)
+
+    def test_utc_date_disagreement_is_flagged(self):
+        row={'league':'PD','date':'2026-10-24','home':'A','away':'B',
+             'home_goals':0,'away_goals':0,'kickoff_utc':'2026-10-25T00:30:00Z'}
+        summary=next(x for x in audit_match_identity([row]) if x['Liga']=='PD')
+        self.assertEqual(summary['Dato afviger fra UTC-kickoff'],1)
+
 if __name__=='__main__':unittest.main()
