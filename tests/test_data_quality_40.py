@@ -11,6 +11,15 @@ class DataQualityTests(unittest.TestCase):
         self.assertEqual(pl['Dublerede afsluttede kampe'],1)
         self.assertEqual(len(output),5)
 
+    def test_coverage_rejects_negative_and_missing_goals(self):
+        base={'date':'2026-10-01','league':'PL','home':'A','away':'B'}
+        rows=[{**base,'home_goals':2,'away_goals':1},
+              {**base,'date':'2026-10-02','home_goals':-1,'away_goals':0},
+              {**base,'date':'2026-10-03','home_goals':'','away_goals':0}]
+        pl=next(x for x in coverage_report(rows,[]) if x['Liga']=='PL')
+        self.assertEqual(pl['Afsluttede kampe'],3)
+        self.assertEqual(pl['Gyldige resultatrækker'],1)
+
     def test_membership_and_international_load(self):
         players=[{'player_id':'p1'}]
         memberships=[{'player_id':'p1','club_id':'c1','from_date':'2026-01-01','to_date':''}]
