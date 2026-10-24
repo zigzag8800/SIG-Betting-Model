@@ -9,7 +9,7 @@ from itertools import groupby
 from model_lab import ExperimentalEngine
 from sig_model import date
 
-LEAGUES=('PL','ELC','PD','SA','BL1','FL1')
+LEAGUES=('PL','PD','SA','BL1','FL1')
 BASE=.12
 DEFAULT_HOME_ADV=.16
 GRID=(.08,.12,.16,.20,.24)
