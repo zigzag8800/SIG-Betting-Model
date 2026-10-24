@@ -709,13 +709,13 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
 with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expanded=False):
     st.info('Kun Europas top 5 indgår i forsøget. Ældre Championship-poster kan fjernes fra det aktive arkiv via oprydningen nedenfor. Belastningsdata påvirker endnu ikke prognoserne.')
     st.markdown('**Kampprogram på tværs af turneringer – datakontrol**')
-    st.caption('Upload et verificeret kampprogram som CSV. Påkrævede kolonner: date, home, away, league, competition_type, known_at, status. Tilladte competition_type: league, champions_league, europa_league, conference_league, domestic_cup, other. known_at er datoen hvor oplysningerne var kendt.')
+    st.caption('Upload et verificeret kampprogram som CSV. Påkrævede kolonner: date, home, away, league, competition_type, known_at, status. Tilladte competition_type: league, champions_league, europa_league, conference_league, domestic_cup, international, other. known_at er datoen hvor oplysningerne var kendt.')
     schedule_upload=st.file_uploader('Upload kampprogram (CSV)',type=['csv'],key='schedule_40_upload')
     if schedule_upload:
         try:
             schedule_rows=parse_upload(schedule_upload,['date','home','away','league','competition_type','known_at','status'])
             for entry in schedule_rows:
-                if entry['competition_type'] not in ('league','champions_league','europa_league','conference_league','domestic_cup','other'):
+                if entry['competition_type'] not in ('league','champions_league','europa_league','conference_league','domestic_cup','international','other'):
                     raise ValueError('Ukendt turneringstype')
                 dt.date.fromisoformat(entry['date'][:10])
                 dt.date.fromisoformat(entry['known_at'][:10])
