@@ -81,6 +81,19 @@ def test_pooling(rows,train_end,test_end):
     return records,parameters
 
 
+
+def parameter_search_report(train):
+    """Explain why the tuned Elo variants collapse, without altering predictions."""
+    scores={effect:_scores(train,effect) for effect in GRID}
+    result=[]
+    for league in ('ALLE',)+LEAGUES:
+        for effect in GRID:
+            values=[v for x in scores[effect].values() for v in x] if league=='ALLE' else scores[effect].get(league,[])
+            if values:
+                result.append({'Liga':league,'Elo-vægt':effect,'Kampe':len(values),
+                               'Trænings-log-loss':round(sum(values)/len(values),6)})
+    return result
+
 def audit_pooling(records, parameters, tolerance=1e-12):
     """Explicitly report whether fitted models differ in parameters and predictions."""
     variants=tuple(parameters)
