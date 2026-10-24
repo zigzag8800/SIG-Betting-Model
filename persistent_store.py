@@ -42,10 +42,10 @@ class Store:
                 (kind,key,Jsonb(payload)))
 
     def put_api_matches(self, key, payload):
-        """Preserve pre-existing and new provider snapshots in one transaction.
+        """Atomically version the parsed matches array, not the full HTTP body.
 
-        Old cache data must be archived too when this feature first goes live.
-        Snapshot timestamps are observation times, never historical known_at.
+        Preserve the previous cached array at first refresh as well. Database
+        saved_at marks archive insertion, never historical provider known_at.
         """
         from psycopg.types.json import Jsonb
         digest=content_key(payload)
