@@ -1,6 +1,6 @@
 """Tests for SIG 4.0 data contracts (no provider downloads)."""
 import unittest
-from data_quality_40 import coverage_report,validate_identity_data,player_load
+from data_quality_40 import coverage_report,coverage_risks,validate_identity_data,player_load
 
 class DataQualityTests(unittest.TestCase):
     def test_coverage_and_duplicates(self):
@@ -50,5 +50,14 @@ class DataQualityTests(unittest.TestCase):
             'competition_type':'international','minutes':90}]
         with self.assertRaises(ValueError):
             validate_identity_data(p,m,a)
+
+    def test_data_provenance_gaps(self):
+        row={'date':'2026-10-01','league':'PL','home':'A','away':'B','home_goals':1,'away_goals':0}
+        result=coverage_risks([row],[])
+        pl=next(item for item in result if item['Liga']=='PL')
+        self.assertEqual(pl['Mangler kamp-ID'],1)
+        self.assertEqual(pl['Mangler kickoff UTC'],1)
+        self.assertEqual(pl['Mangler datakilde'],1)
+        self.assertEqual(pl['Mangler tilgængelighedstid'],1)
 
 if __name__=='__main__':unittest.main()
