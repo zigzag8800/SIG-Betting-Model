@@ -19,6 +19,7 @@ import streamlit as st
 from sig_model import Engine, load_history, value_rows
 from model_lab import compare_variants
 from league_lab import test_pooling, audit_pooling, parameter_search_report
+from compare_40 import compare_sig_e_40, summarize_pairs, validate_pairs
 from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
 from benchmark_diagnostics import diagnostic_tables
 from historical_coverage import audit_uploaded_files
@@ -703,6 +704,47 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
                 st.warning('Ingen tilstrækkelig testhistorik. Hent flere sæsoner eller vælg en senere teststart.')
     else:
         st.info('Indlæs kampresultater i sektion 1 først.')
+
+with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expanded=False):
+    st.caption('Ny modstanderjusteret målmodel sammenlignes med SIG E på nøjagtig samme historiske kampe. Kun kampresultater før hver prognose anvendes. Ingen nye data downloades.')
+    research_history=st.session_state.get('history',[])
+    if research_history:
+        research_dates=sorted(dt.date.fromisoformat(r['date'][:10]) for r in research_history)
+        research_first,research_last=research_dates[0],research_dates[-1]
+        eligible_start=research_first+dt.timedelta(days=120)
+        if eligible_start>research_last:
+            st.warning('For få historiske datoer til en selvstændig testperiode.')
+        else:
+            proposed=research_dates[int(len(research_dates)*.75)]
+            proposed=max(eligible_start,min(research_last,proposed))
+            start40=st.date_input('Første testdato for SIG 4.0',value=proposed,min_value=eligible_start,max_value=research_last,key='sig40_test_start_v1')
+            training40=sum(d<start40 for d in research_dates)
+            test40=sum(d>=start40 for d in research_dates)
+            st.caption(f'Historiske træningskampe: {training40}. Kampe i mulig testperiode: {test40}.')
+            if training40<500 or test40<300:
+                st.warning('Begrænset datagrundlag. Resultatet skal betragtes som foreløbigt.')
+            if st.button('Sammenlign SIG 4.0 med SIG E',key='run_sig40_comparison'):
+                try:
+                    with st.spinner('Tester begge modeller kronologisk på identiske kampe…'):
+                        pairs40=compare_sig_e_40(research_history,start40,research_last+dt.timedelta(days=1))
+                        count40=validate_pairs(pairs40)
+                        summary40=summarize_pairs(pairs40)
+                        st.session_state['sig40_comparison']=(pairs40,summary40,start40.isoformat(),len(research_history))
+                    st.success(f'Sammenligning gennemført på {count40} fælles kampe.')
+                except Exception as exc:
+                    st.error(f'SIG 4.0 sammenligningsfejl: {exc}')
+            cached40=st.session_state.get('sig40_comparison')
+            if cached40:
+                pairs40,summary40,saved_date40,saved_len40=cached40
+                if saved_date40!=start40.isoformat() or saved_len40!=len(research_history):
+                    st.warning('Data eller testdato er ændret. Kør sammenligningen igen.')
+                elif pairs40:
+                    st.markdown('**SIG E mod SIG 4.0 – samlet og pr. liga**')
+                    st.dataframe(pd.DataFrame(summary40).round(5),hide_index=True,use_container_width=True)
+                    st.download_button('Download SIG 4.0 sammenligning (CSV)',to_csv(pairs40,list(pairs40[0])),'sig_e_vs_40.csv','text/csv',key='download_sig40')
+                    st.caption('Dette er endnu ikke en uafhængig bookmaker-test. Resultatet dokumenterer ikke i sig selv en økonomisk fordel.')
+    else:
+        st.info('Indlæs først historiske kampe fra det eksisterende arkiv.')
 
 st.divider()
 st.caption('Football data provided by the Football-Data.org API')
