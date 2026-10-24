@@ -66,3 +66,8 @@ class MatchLifecycleTests(unittest.TestCase):
     def test_no_fuzzy_match_when_identity_missing(self):
         new={**self.old,'match_id':''}
         self.assertEqual(preview([self.old],[new])['summary'],{'identity_review':1})
+
+    def test_review_preserves_separate_regular_time_score(self):
+        result=classify(self.old,{**self.final(),'score_duration':'EXTRA_TIME','regular_time_home_goals':0,'regular_time_away_goals':0})
+        self.assertEqual(result['regular_time_score'],(0,0));self.assertEqual(result['incoming_score'],[1,0])
+        self.assertFalse(result['applies_changes'])

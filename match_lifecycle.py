@@ -41,6 +41,9 @@ def classify(previous,incoming):
     """Classify only; all proposals require a separate application workflow."""
     def decision(action,reason):
         return dict(action=action,reason=reason,source=incoming.get('source'),match_id=str(incoming.get('match_id') or ''),
+                    home=incoming.get('home'),away=incoming.get('away'),competition=incoming.get('league') or incoming.get('competition'),season=incoming.get('season'),
+                    score_duration=incoming.get('score_duration'),
+                    regular_time_score=score(dict(home_goals=incoming.get('regular_time_home_goals'),away_goals=incoming.get('regular_time_away_goals'))),
                     previous_status=previous.get('status') if previous else None,incoming_status=incoming.get('status'),
                     previous_kickoff=previous.get('kickoff_utc') if previous else None,incoming_kickoff=incoming.get('kickoff_utc'),
                     previous_score=list(score(previous)) if previous and score(previous) is not None else None,

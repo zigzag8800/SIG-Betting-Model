@@ -798,6 +798,8 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
             st.markdown('**Kampændringer fra gemt API-cache – kun kontrol**')
             st.caption('Følger kilde og kamp-ID. Forslag ændrer ingen kamplister. Leverandørens lastUpdated er ikke et historisk known_at.')
             st.write(lifecycle40['summary'])
+            if lifecycle40['summary'].get('score_scope_review'):
+                st.warning('Målgrundlag kræver kontrol: '+str(lifecycle40['summary']['score_scope_review'])+' kampe kan have ukendt varighed, forlænget spilletid eller straffespark. De er ikke automatisk rettet; brug ikke disse resultater som dokumenteret 90-minutters validering.')
             pending40=[r for r in lifecycle40['decisions'] if r['action']!='unchanged']
             if pending40:st.dataframe(pd.DataFrame(pending40),hide_index=True)
             st.download_button('Download kontrol af kampændringer (JSON)',json.dumps(lifecycle40,ensure_ascii=False,indent=2).encode(),

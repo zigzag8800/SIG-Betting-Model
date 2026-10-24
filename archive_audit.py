@@ -31,7 +31,9 @@ def normalize_cached(matches,code,season):
             home_team_id=str(h.get('id') or ''),away_team_id=str(a.get('id') or ''),
             kickoff_utc=m.get('utcDate'),status=m.get('status'),source='football-data.org',
             home_goals=score.get('home'),away_goals=score.get('away'),stage=m.get('stage'),
-            provider_updated_at=m.get('lastUpdated'),score_duration=(m.get('score') or {}).get('duration')))
+            provider_updated_at=m.get('lastUpdated'),score_duration=(m.get('score') or {}).get('duration'),
+            regular_time_home_goals=((m.get('score') or {}).get('regularTime') or {}).get('home'),
+            regular_time_away_goals=((m.get('score') or {}).get('regularTime') or {}).get('away')))
     return rows
 
 def summarize(rows,scope):
