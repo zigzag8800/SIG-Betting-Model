@@ -53,9 +53,10 @@ class LeagueRegression(unittest.TestCase):
         a=[r for r in original if r['date']==first]
         b=[r for r in mutated if r['date']==first]
         self.assertEqual(len(a),len(b))
-        # Brier is outcome-dependent; impossible to assert equality of loss here.
-        # Later results are intentionally changed, but fitted parameters should be stable.
         self.assertTrue(a)
+        identify=lambda rows:{(r['league'],r['model']):(r['p1'],r['px'],r['p2']) for r in rows}
+        self.assertEqual(identify(a),identify(b),
+                         'First test-day forecast changed after altering future outcomes')
 
     def test_identical_parameter_warning(self):
         setting={league:{'elo':.12,'home_adv':.16} for league in ('PL','ELC','PD','SA','BL1','FL1')}
