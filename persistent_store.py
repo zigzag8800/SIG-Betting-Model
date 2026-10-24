@@ -31,6 +31,10 @@ class Store:
             conn.execute('CREATE INDEX IF NOT EXISTS sig_download_provider_time ON sig_downloads(provider, attempted_at)')
 
     def put(self, kind, key, payload):
+        if kind=='api_matches':
+            return self.put_api_matches(key,payload)
+        if kind=='api_matches_version':
+            raise StorageError('API-versioner må kun oprettes gennem den beskyttede cachefunktion.')
         from psycopg.types.json import Jsonb
         with self.connect() as conn:
             conn.execute('''INSERT INTO sig_archive(kind,key,payload) VALUES(%s,%s,%s)
