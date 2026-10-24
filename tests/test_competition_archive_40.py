@@ -38,6 +38,20 @@ class CompetitionArchiveTests(unittest.TestCase):
         self.assertEqual(merged[0]['home_team_id'],'100')
         self.assertEqual(len(problems),1)
 
+    def test_conflicting_kickoff_does_not_overwrite(self):
+        old=convert_research_matches([self.fixture()],'CL')
+        changed=[{**old[0],'kickoff_utc':'2026-10-25T19:00:00Z'}]
+        merged,issues=merge_research_matches(old,changed)
+        self.assertEqual(merged[0]['kickoff_utc'],old[0]['kickoff_utc'])
+        self.assertEqual(len(issues),1)
+
+    def test_blank_source_fields_do_not_erase_existing(self):
+        old=convert_research_matches([self.fixture()],'CL')
+        incoming=[{**old[0],'home':'','known_at':None}]
+        merged,issues=merge_research_matches(old,incoming)
+        self.assertFalse(issues)
+        self.assertEqual(merged[0]['home'],'Club A')
+
     def test_coverage_is_diagnostic(self):
         rows=convert_research_matches([self.fixture()],'CL')
         cl=next(x for x in research_coverage(rows) if x['competition']=='CL')
