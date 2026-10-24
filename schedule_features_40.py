@@ -8,7 +8,7 @@ from collections import defaultdict
 
 TOP_FIVE=frozenset(('PL','PD','SA','BL1','FL1'))
 COMPETITIONS=frozenset(('league','champions_league','europa_league',
-                        'conference_league','domestic_cup','other'))
+                        'conference_league','domestic_cup','international','other'))
 def day(value):
     return value if isinstance(value,dt.date) else dt.date.fromisoformat(str(value)[:10])
 
