@@ -97,6 +97,43 @@ class Store:
                 'immutable_versions':by_kind.get('api_matches_version',0),
                 'cache_entries_without_matching_snapshot':unversioned}
 
+    def schema_inventory(self):
+        """Read-only PostgreSQL object inventory; no data rows or credentials."""
+        with self.connect() as conn:
+            conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+            relations=conn.execute("""SELECT n.nspname,c.relname,c.relkind,
+                pg_get_userbyid(c.relowner) IS NOT NULL AS owner_recorded
+                FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname NOT IN ('pg_catalog','information_schema')
+                  AND n.nspname NOT LIKE 'pg_toast%'
+                  AND c.relkind IN ('r','p','v','m','f')
+                ORDER BY n.nspname,c.relname""").fetchall()
+            columns=conn.execute("""SELECT table_schema,table_name,column_name,
+                data_type,is_nullable
+                FROM information_schema.columns
+                WHERE table_schema NOT IN ('pg_catalog','information_schema')
+                ORDER BY table_schema,table_name,ordinal_position""").fetchall()
+            constraints=conn.execute("""SELECT n.nspname,c.relname,k.conname,k.contype
+                FROM pg_catalog.pg_constraint k
+                JOIN pg_catalog.pg_class c ON c.oid=k.conrelid
+                JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname NOT IN ('pg_catalog','information_schema')
+                  AND n.nspname NOT LIKE 'pg_toast%'
+                ORDER BY n.nspname,c.relname,k.conname""").fetchall()
+            indexes=conn.execute("""SELECT schemaname,tablename,indexname
+                FROM pg_catalog.pg_indexes
+                WHERE schemaname NOT IN ('pg_catalog','information_schema')
+                  AND schemaname NOT LIKE 'pg_toast%'
+                ORDER BY schemaname,tablename,indexname""").fetchall()
+        return {
+            'relations':[dict(zip(('schema','name','type','owner_recorded'),r)) for r in relations],
+            'columns':[dict(zip(('schema','relation','column','datatype','nullable'),r)) for r in columns],
+            'constraints':[dict(zip(('schema','relation','name','type'),r)) for r in constraints],
+            'indexes':[dict(zip(('schema','relation','name'),r)) for r in indexes],
+            'scope':'Metadata visible to the configured PostgreSQL role; no rows read or modified.'
+        }
+
     def audit_snapshot(self):
         """Inspect all record kinds without modifying data or provider ledgers."""
         with self.connect() as conn:
