@@ -802,12 +802,17 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
     if STORE and st.button('Undersøg PostgreSQL uden downloads',key='audit_postgres'):
         try:
             audit40,cached40=build_report(STORE.audit_snapshot(),st.session_state)
+            st.session_state['_api_version_status40']=STORE.api_version_status()
             st.session_state['_postgres_audit']=(audit40,cached40)
         except Exception:
             st.error('PostgreSQL-undersøgelsen fejlede; ingen data ændret.')
     if st.session_state.get('_postgres_audit'):
         audit40,cached40=st.session_state['_postgres_audit']
         st.caption(audit40['scope'])
+        if st.session_state.get('_api_version_status40') is not None:
+            st.markdown('**Rå API-versionshistorik (læsekontrol)**')
+            st.write(st.session_state['_api_version_status40'])
+            st.caption('Kun optælling. Cacheposter uden identisk versionskopi bevares ved næste opdatering; det er ikke et historisk known_at.')
         st.dataframe(pd.DataFrame(audit40['inventory']),hide_index=True)
         st.dataframe(pd.DataFrame(audit40['coverage']),hide_index=True)
         for bundle40 in audit40.get('provider_bundles',[]):
