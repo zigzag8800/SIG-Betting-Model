@@ -3,7 +3,6 @@
 Uses verified football-data.org identifiers, never fuzzy team-name matching.
 Does not download provider data or change production forecasts.
 """
-from collections import defaultdict
 
 RESEARCH_COMPETITIONS=frozenset(('CL','EL','UCL','EC','WC','QUFA'))
 
@@ -58,6 +57,8 @@ def merge_research_matches(existing,incoming):
 
 def research_coverage(rows):
     return [{'competition':comp,'matches':sum(x.get('competition')==comp for x in rows),
+             'finished':sum(x.get('competition')==comp and str(x.get('status','')).upper()=='FINISHED' for x in rows),
              'stable_match_ids':sum(x.get('competition')==comp and bool(x.get('match_id')) for x in rows),
+             'stable_team_ids':sum(x.get('competition')==comp and bool(x.get('home_team_id')) and bool(x.get('away_team_id')) for x in rows),
              'known_at_available':sum(x.get('competition')==comp and bool(x.get('known_at')) for x in rows)}
             for comp in sorted(RESEARCH_COMPETITIONS)]
