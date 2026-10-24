@@ -745,6 +745,26 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
                                  st.session_state.get('research_memberships_40',[]))
     st.dataframe(pd.DataFrame(audit_rows40),hide_index=True,use_container_width=True)
     st.caption('Tallene viser dækning i det aktive arkiv. Manglende historiske kamp-ID og kickoff kan ikke udledes sikkert fra holdnavne og dato alene.')
+    # Download a read-only snapshot of aggregate coverage; no credentials or
+    # individual player records are included.
+    coverage_export40=[]
+    for item in audit_rows40:
+        coverage_export40.append({'Type':'Liga','Kode':item['Liga'],
+            'Kampe':item['Afsluttede kampe'],
+            'Gyldige slutresultater':item['Gyldige resultatrækker'],
+            'Kamp-ID':item['Afsluttede kampe med kamp-ID'],
+            'Kickoff UTC':item['Afsluttede kampe med kickoff UTC']})
+    for item in research_coverage(st.session_state.get('research_competitions_40',[])):
+        coverage_export40.append({'Type':'Ekstra turnering','Kode':item['competition'],
+            'Kampe':item['matches'],
+            'Gyldige slutresultater':item['finished_with_score'],
+            'Kamp-ID':item['stable_match_ids'],
+            'Kickoff UTC':None})
+    st.download_button('Download samlet dækningsrapport (CSV)',
+        data=pd.DataFrame(coverage_export40).to_csv(index=False).encode('utf-8-sig'),
+        file_name='sig_datadaekning_40.csv',mime='text/csv',
+        key='sig40_coverage_export')
+    st.caption('Rapporten læser kun den aktive sessions arkivdata og indeholder ingen API-nøgle eller spilleroplysninger.')
     st.markdown('**Importér forskningskampe fra ekstra turneringer**')
     st.caption('Bruger eksisterende API-cache og adgangsnøgle. Importér kun de valgte turneringer/sæsoner. Ingen effekt på produktionens prognoser.')
     research_codes40={'Champions League':'CL','Europa League':'EL','Conference League':'UCL',
