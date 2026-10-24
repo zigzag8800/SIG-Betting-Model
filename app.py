@@ -643,7 +643,7 @@ with st.expander('7 · Bookmaker-laboratorium 3.8', expanded=False):
             st.caption(f'Sprunget over: {excluded["no_odds"]//2} kampe uden gyldige odds og {excluded["opening_only"]//2} kun med opening odds.')
 
 with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
-    st.caption('Sammenligner fælles, ligaspecifik og delvist sammenlagt Elo-vægt. Kun træningsperioden bruges til at vælge parametre. Normal SIG-model ændres ikke.')
+    st.caption('Sammenligner fælles, ligaspecifik og delvist sammenlagt Elo-vægt og hjemmebanefordel. Parametrene vælges alene fra træningsperioden; produktionsmodellen ændres ikke.')
     league_hist=st.session_state.get('history',[])
     if league_hist:
         dates=sorted(dt.date.fromisoformat(r['date'][:10]) for r in league_hist)
@@ -654,11 +654,12 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
             with st.spinner('Træner på historik og tester på senere kampe…'):
                 records,params=test_pooling(league_hist,boundary,last+dt.timedelta(days=1))
                 st.session_state['league_pooling_result']=(records,params,len(league_hist),boundary.isoformat())
+                st.session_state['league_pooling_revision']='3.9-home-v1'
                 st.session_state['league_pooling_grid']=parameter_search_report([r for r in league_hist if r['date'][:10]<boundary.isoformat()])
         result=st.session_state.get('league_pooling_result')
         if result:
             records,params,old_len,old_date=result
-            if old_len!=len(league_hist) or old_date!=boundary.isoformat():
+            if old_len!=len(league_hist) or old_date!=boundary.isoformat() or st.session_state.get('league_pooling_revision')!='3.9-home-v1':
                 st.warning('Data eller testperiode er ændret. Kør testen igen.')
             elif records:
                 frame=pd.DataFrame(records)
@@ -673,8 +674,9 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
                 st.dataframe(frame.groupby('model',as_index=False).agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean')).round(4),hide_index=True,use_container_width=True)
                 st.markdown('**Resultat pr. liga**')
                 st.dataframe(frame.groupby(['league','model'],as_index=False).agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean')).round(4),hide_index=True,use_container_width=True)
-                st.markdown('**Elo-vægt valgt fra træningsperioden**')
-                st.dataframe(pd.DataFrame(params).round(3),use_container_width=True)
+                st.markdown('**Elo-vægt og hjemmebanefordel valgt fra træningsperioden**')
+                parameter_rows=[{'Liga':lg,'Model':name,'Elo-vægt':value['elo'],'Hjemmebanefordel':value['home_adv']} for name,values in params.items() for lg,value in values.items()]
+                st.dataframe(pd.DataFrame(parameter_rows).round(4),hide_index=True,use_container_width=True)
                 grid_rows=st.session_state.get('league_pooling_grid',[])
                 if grid_rows:
                     st.markdown('**Hvorfor vælger modellen samme Elo-vægt?**')
