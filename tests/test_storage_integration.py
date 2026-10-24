@@ -47,7 +47,7 @@ class ArchiveTests(unittest.TestCase):
         with patch('urllib.request.urlopen',return_value=context) as request:
             ns['api_matches']('test-key','PL',2026)
         store.reserve.assert_called_once_with('football-data.org','PL:2026')
-        store.put.assert_called_once();store.finish.assert_called_once_with(7,'success')
+        store.put_api_matches.assert_called_once();store.finish.assert_called_once_with(7,'success')
         self.assertNotIn('test-key',str(store.mock_calls))
 
     def test_rate_limit_records_cooldown_and_does_not_cache(self):
@@ -56,7 +56,7 @@ class ArchiveTests(unittest.TestCase):
         error=urllib.error.HTTPError('https://example.invalid',429,'rate limit',{'Retry-After':'120'},io.BytesIO(b'wait'))
         with patch('urllib.request.urlopen',side_effect=error):
             with self.assertRaises(ns['ApiError']): ns['api_matches']('test-key','PL',2026)
-        store.finish.assert_called_once_with(7,'HTTP 429',120);store.put.assert_not_called()
+        store.finish.assert_called_once_with(7,'HTTP 429',120);store.put_api_matches.assert_not_called()
 
     def test_invalid_token_is_authentication_failure_even_with_http_400(self):
         ns=functions()
