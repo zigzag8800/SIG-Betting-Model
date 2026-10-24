@@ -15,7 +15,7 @@ class CompetitionArchiveTests(unittest.TestCase):
         self.assertEqual(convert_research_matches([invalid],'CL'),[])
 
     def test_documented_european_codes(self):
-        for code in ('CL','EL','UCL','EC','WC','QUFA'):
+        for code in ('CL','EL','UCL','EC','WC','QUFA','FAC','FLC','DFB','CDR'):
             with self.subTest(code=code):
                 self.assertEqual(convert_research_matches([self.fixture()],code)[0]['competition'],code)
         with self.assertRaises(ValueError):
