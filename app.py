@@ -55,7 +55,7 @@ else:
 
 PERSIST_KEYS=('history','fixtures','odds','loaded_combos','source_label','api_fetch_report',
               'historical_bookmaker_files','backtest_results','backtest_signature',
-              'lab_rows','lab_signature','benchmark_result','benchmark_signature','imported_backtests')
+              'lab_rows','lab_signature','benchmark_result','benchmark_signature','imported_backtests','cross_comp_schedule_40')
 
 def restore_types(value):
     # JSON stores tuples as lists; signatures must preserve their comparison type.
@@ -338,7 +338,7 @@ with st.expander('1 · Datakilde',expanded=True):
         st.download_button('Kampprogram-skabelon',to_csv([],FIX_FIELDS),'fixtures_template.csv','text/csv')
 
 with st.expander('1b · Historiske statistikdata – datadækning',expanded=False):
-    st.caption('Undersøg dine lokalt hentede CSV-filer fra Football-Data.co.uk. Understøtter E0, E1, SP1, I1, D1 og F1. Automatisk hentning er midlertidigt deaktiveret af hensyn til kildens begrænsninger. Ingen ændring af modelberegninger.')
+    st.caption('Undersøg dine lokalt hentede CSV-filer fra Football-Data.co.uk. Understøtter E0, SP1, I1, D1 og F1. Automatisk hentning er midlertidigt deaktiveret af hensyn til kildens begrænsninger. Ingen ændring af modelberegninger.')
     st.markdown('[Åbn Football-Data.co.uk sæsonfiler](https://www.football-data.co.uk/downloadm.php)')
     st.caption('Kildens fair-use-regler: kun personlig/akademisk brug og højst to lette automatiske hentninger om ugen. Brug ikke knappen hyppigere, heller ikke efter genstart.')
     st.info('Godkendt sæsonhentning findes i sektion 7. Et varigt register begrænser nye downloads til to forsøg pr. syv døgn. Tidligere hentninger uden for registeret kan ikke rekonstrueres.')
@@ -707,18 +707,37 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
         st.info('Indlæs kampresultater i sektion 1 først.')
 
 with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expanded=False):
-    st.info('Kun Europas top 5 indgår i dette forsøg. Championship-historik er bevaret i arkivet, men frasorteres fra nye SIG 4.0-tests. Belastningsdata påvirker endnu ikke prognoserne.')
+    st.info('Kun Europas top 5 indgår i forsøget. Ældre Championship-poster kan fjernes fra det aktive arkiv via oprydningen nedenfor. Belastningsdata påvirker endnu ikke prognoserne.')
     st.markdown('**Kampprogram på tværs af turneringer – datakontrol**')
     st.caption('Upload et verificeret kampprogram som CSV. Påkrævede kolonner: date, home, away, league, competition_type, known_at, status. Tilladte competition_type: league, champions_league, europa_league, conference_league, domestic_cup, other. known_at er datoen hvor oplysningerne var kendt.')
     schedule_upload=st.file_uploader('Upload kampprogram (CSV)',type=['csv'],key='schedule_40_upload')
     if schedule_upload:
         try:
             schedule_rows=parse_upload(schedule_upload,['date','home','away','league','competition_type','known_at','status'])
+            for entry in schedule_rows:
+                if entry['competition_type'] not in ('league','champions_league','europa_league','conference_league','domestic_cup','other'):
+                    raise ValueError('Ukendt turneringstype')
+                dt.date.fromisoformat(entry['date'][:10])
+                dt.date.fromisoformat(entry['known_at'][:10])
+            st.session_state['cross_comp_schedule_40']=schedule_rows
+            st.success(f'{len(schedule_rows)} kampe indlæst til arkivet.')
             competition_counts=pd.DataFrame(schedule_rows).groupby('competition_type',as_index=False).size()
             st.dataframe(competition_counts,hide_index=True,use_container_width=True)
             st.caption('Kampprogrammet kontrolleres her, men er ikke endnu koblet til prognosemotoren. Navne eller hold-ID skal matche på tværs af kilder.')
         except (ValueError,KeyError) as exc:
             st.error(f'Kan ikke læse kampprogram: {exc}')
+
+    st.markdown('**Fjern Championship fra aktive data**')
+    if st.button('Ryd Championship fra aktivt arkiv',key='purge_championship_workspace'):
+        for key in ('history','fixtures','odds','lab_rows','backtest_results'):
+            if isinstance(st.session_state.get(key),list):
+                st.session_state[key]=[r for r in st.session_state[key] if not (isinstance(r,dict) and r.get('league')=='ELC')]
+        combos=st.session_state.get('loaded_combos')
+        if isinstance(combos,dict):
+            st.session_state['loaded_combos']={k:v for k,v in combos.items() if not str(k).startswith('ELC:')}
+        for key in ('lab_signature','backtest_signature','benchmark_result','benchmark_signature','league_pooling_result','sig40_comparison'):
+            st.session_state.pop(key,None)
+        st.success('Championship fjernet fra aktive kamplister. Ældre databaseversioner og råarkiv kræver separat fysisk sletning.')
 
     st.caption('Ny modstanderjusteret målmodel sammenlignes med SIG E på nøjagtig samme historiske kampe. Kun kampresultater før hver prognose anvendes. Ingen nye data downloades.')
     research_history=[r for r in st.session_state.get('history',[]) if r.get('league') in TOP_FIVE]
