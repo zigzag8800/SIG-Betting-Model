@@ -21,6 +21,7 @@ from model_lab import compare_variants
 from league_lab import test_pooling, audit_pooling, parameter_search_report
 from compare_40 import compare_sig_e_40, summarize_pairs, validate_pairs
 from schedule_features_40 import schedule_features, TOP_FIVE
+from data_quality_40 import coverage_report, validate_identity_data, player_load
 from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
 from benchmark_diagnostics import diagnostic_tables
 from historical_coverage import audit_uploaded_files
@@ -55,7 +56,7 @@ else:
 
 PERSIST_KEYS=('history','fixtures','odds','loaded_combos','source_label','api_fetch_report',
               'historical_bookmaker_files','backtest_results','backtest_signature',
-              'lab_rows','lab_signature','benchmark_result','benchmark_signature','imported_backtests','cross_comp_schedule_40')
+              'lab_rows','lab_signature','benchmark_result','benchmark_signature','imported_backtests','cross_comp_schedule_40','research_players_40','research_memberships_40','research_appearances_40')
 
 def restore_types(value):
     # JSON stores tuples as lists; signatures must preserve their comparison type.
@@ -726,6 +727,36 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
             st.caption('Kampprogrammet kontrolleres her, men er ikke endnu koblet til prognosemotoren. Navne eller hold-ID skal matche på tværs af kilder.')
         except (ValueError,KeyError) as exc:
             st.error(f'Kan ikke læse kampprogram: {exc}')
+
+    st.markdown('**SIG 4.0 – datakvalitet for Europas top 5**')
+    audit_rows40=coverage_report(st.session_state.get('history',[]),st.session_state.get('fixtures',[]),
+                                 st.session_state.get('cross_comp_schedule_40',[]),
+                                 st.session_state.get('research_players_40',[]),
+                                 st.session_state.get('research_appearances_40',[]),
+                                 st.session_state.get('research_memberships_40',[]))
+    st.dataframe(pd.DataFrame(audit_rows40),hide_index=True,use_container_width=True)
+    st.caption('Tallene viser dækning i det aktive arkiv. Manglende historiske kamp-ID og kickoff kan ikke udledes sikkert fra holdnavne og dato alene.')
+    st.markdown('**Spillere, historiske klubtilhørsforhold og landsholdsminutter**')
+    st.caption('Tre CSV-filer: spillerregister (player_id), klubhistorik (player_id, club_id, from_date, to_date) og spillerkampe (player_id, match_id, date, known_at, competition_type, minutes). ID-koblinger skal være verificerede. Import giver ingen automatisk påvirkning af prognoser.')
+    players_upload=st.file_uploader('Upload spillerregister (CSV)',type=['csv'],key='sig40_players_upload')
+    members_upload=st.file_uploader('Upload klubtilhørsforhold (CSV)',type=['csv'],key='sig40_memberships_upload')
+    appearances_upload=st.file_uploader('Upload spillerkampe (CSV)',type=['csv'],key='sig40_appearances_upload')
+    if st.button('Kontrollér og gem spillerdata',key='sig40_validate_player_data'):
+        try:
+            players40=parse_upload(players_upload,['player_id']) if players_upload else st.session_state.get('research_players_40',[])
+            members40=parse_upload(members_upload,['player_id','club_id','from_date','to_date']) if members_upload else st.session_state.get('research_memberships_40',[])
+            appearances40=parse_upload(appearances_upload,['player_id','match_id','date','known_at','competition_type','minutes']) if appearances_upload else st.session_state.get('research_appearances_40',[])
+            if not players40:
+                raise ValueError('Mangler spillerregister.')
+            if not members40:
+                raise ValueError('Mangler klubtilhørsforhold.')
+            validate_identity_data(players40,members40,appearances40)
+            st.session_state['research_players_40']=players40
+            st.session_state['research_memberships_40']=members40
+            st.session_state['research_appearances_40']=appearances40
+            st.success(f'Data kontrolleret og klargjort til arkiv: {len(players40)} spillere, {len(members40)} klubperioder og {len(appearances40)} spillerkampe.')
+        except (ValueError,KeyError,TypeError) as exc:
+            st.error(f'Spillerdata afvist: {exc}')
 
     st.markdown('**Fjern Championship fra aktive data**')
     if st.button('Ryd Championship fra aktivt arkiv',key='purge_championship_workspace'):
