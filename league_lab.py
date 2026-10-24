@@ -79,3 +79,28 @@ def test_pooling(rows,train_end,test_end):
             for engine in engines.values():
                 engine.update(r['league'],r['home'],r['away'],day,int(r['home_goals']),int(r['away_goals']))
     return records,parameters
+
+
+def audit_pooling(records, parameters, tolerance=1e-12):
+    """Explicitly report whether fitted models differ in parameters and predictions."""
+    variants=tuple(parameters)
+    param_distinct=len({tuple(round(parameters[name][lg],12) for lg in LEAGUES)
+                        for name in variants})
+    grouped=defaultdict(dict)
+    for r in records:
+        key=(r['date'],r['league'])
+        grouped[key].setdefault(r['model'],[]).append((r['brier'],r['logloss']))
+    # Multiple matches per league/date are compared in their stable iteration order.
+    groups=len(grouped)
+    diff_count=0
+    for values in grouped.values():
+        if not all(n in values for n in variants): continue
+        sample=[values[n] for n in variants]
+        if any(len(seq)!=len(sample[0]) for seq in sample): continue
+        if any(abs(a[0]-b[0])>tolerance or abs(a[1]-b[1])>tolerance
+               for seq in sample[1:] for a,b in zip(sample[0],seq)):
+            diff_count+=1
+    return {'distinct_parameter_sets':param_distinct,
+            'league_date_groups':groups,
+            'groups_with_prediction_difference':diff_count,
+            'identical':param_distinct==1 or (groups>0 and diff_count==0)}
