@@ -18,7 +18,7 @@ import pandas as pd
 import streamlit as st
 from sig_model import Engine, load_history, value_rows
 from model_lab import compare_variants
-from league_lab import test_pooling, audit_pooling
+from league_lab import test_pooling, audit_pooling, parameter_search_report
 from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
 from benchmark_diagnostics import diagnostic_tables
 from historical_coverage import audit_uploaded_files
@@ -654,6 +654,7 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
             with st.spinner('Træner på historik og tester på senere kampe…'):
                 records,params=test_pooling(league_hist,boundary,last+dt.timedelta(days=1))
                 st.session_state['league_pooling_result']=(records,params,len(league_hist),boundary.isoformat())
+                st.session_state['league_pooling_grid']=parameter_search_report([r for r in league_hist if r['date'][:10]<boundary.isoformat()])
         result=st.session_state.get('league_pooling_result')
         if result:
             records,params,old_len,old_date=result
@@ -674,6 +675,13 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
                 st.dataframe(frame.groupby(['league','model'],as_index=False).agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean')).round(4),hide_index=True,use_container_width=True)
                 st.markdown('**Elo-vægt valgt fra træningsperioden**')
                 st.dataframe(pd.DataFrame(params).round(3),use_container_width=True)
+                grid_rows=st.session_state.get('league_pooling_grid',[])
+                if grid_rows:
+                    st.markdown('**Hvorfor vælger modellen samme Elo-vægt?**')
+                    st.caption('Træningsperiodens log-loss for alle fem Elo-kandidater i hver liga. Lavere er bedre. Kun data før testperioden er brugt.')
+                    st.dataframe(pd.DataFrame(grid_rows),hide_index=True,use_container_width=True)
+                    st.download_button('Download Elo-parameterkontrol (CSV)',to_csv(grid_rows,list(grid_rows[0])),'sig_elo_grid_39.csv','text/csv',key='download_elo_grid')
+
                 st.download_button('Download ligatest (CSV)',to_csv(records,list(records[0])),'sig_league_39.csv','text/csv',key='download_league_lab')
                 st.caption('Dette er kun en test af ligavise Elo-parametre. Separate angrebs- og forsvarsstyrker kommer i en senere variant. Tidligere modelvalg kan have påvirket testdesignet.')
             else:
