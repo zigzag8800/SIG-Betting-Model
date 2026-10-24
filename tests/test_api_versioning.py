@@ -44,6 +44,23 @@ class ApiVersioningTests(unittest.TestCase):
                          'scope:PL:2026:'+content_key(new))
         self.assertIn("VALUES('api_matches'",calls[4].args[0])
 
+    def test_status_is_read_only_and_returns_aggregate_counts(self):
+        store=object.__new__(Store)
+        conn=MagicMock()
+        context=MagicMock()
+        context.__enter__.return_value=conn
+        store.connect=lambda: context
+        conn.execute.return_value.fetchall.return_value=[
+            ('api_matches',12),('api_matches_version',4)]
+        conn.execute.return_value.fetchone.return_value=(9,)
+        status=store.api_version_status()
+        self.assertEqual(status,dict(active_cache_entries=12,
+                                     immutable_versions=4,
+                                     cache_entries_without_matching_snapshot=9))
+        self.assertEqual(conn.execute.call_count,3)
+        self.assertIn('READ ONLY',conn.execute.call_args_list[0].args[0])
+        self.assertNotIn('cache_key',status)
+
     def test_version_key_changes_when_original_response_changes(self):
         store=object.__new__(Store)
         conn=MagicMock()
