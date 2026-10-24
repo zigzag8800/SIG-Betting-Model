@@ -793,6 +793,15 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
                 'Resultatrækker':sum(c['valid_results'] for c in m.get('coverage',[])),
                 'Kontrolfejl':m.get('error') or m.get('skipped') or ''} for m in bundle40['members']]),hide_index=True)
 
+        lifecycle40=audit40.get('cache_lifecycle')
+        if lifecycle40:
+            st.markdown('**Kampændringer fra gemt API-cache – kun kontrol**')
+            st.caption('Følger kilde og kamp-ID. Forslag ændrer ingen kamplister. Leverandørens lastUpdated er ikke et historisk known_at.')
+            st.write(lifecycle40['summary'])
+            pending40=[r for r in lifecycle40['decisions'] if r['action']!='unchanged']
+            if pending40:st.dataframe(pd.DataFrame(pending40),hide_index=True)
+            st.download_button('Download kontrol af kampændringer (JSON)',json.dumps(lifecycle40,ensure_ascii=False,indent=2).encode(),
+                               'sig_match_lifecycle.json','application/json',key='lifecycle_download')
         st.download_button('Download PostgreSQL-undersøgelse (JSON)',json.dumps(audit40,default=str,ensure_ascii=False,indent=2).encode(),
                            'sig_postgres_audit.json','application/json',key='postgres_audit_download')
         st.download_button('Download PostgreSQL-dækning (CSV)',pd.DataFrame(audit40['coverage']).to_csv(index=False).encode('utf-8-sig'),

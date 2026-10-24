@@ -54,3 +54,27 @@ class AppImportFlows(unittest.TestCase):
             at.run(timeout=20);store.assert_not_called()
         self.assertEqual(len(at.exception),0)
         self.assertEqual([x.label for x in at.text_input],['Adgang til privat dataarkiv'])
+
+    def test_moved_source_match_id_does_not_create_second_fixture(self):
+        fixture=dict(date='2026-10-01',league='PL',home='Home',away='Away',match_id='42',home_team_id='1',away_team_id='2',source='football-data.org',kickoff_utc='2026-10-01T12:00:00Z',status='TIMED')
+        at=self.app([], [fixture])
+        moved={**self.match,'status':'TIMED','utcDate':'2026-10-02T12:00:00Z','score':{}}
+        self.run_import(at,[moved])
+        self.assertEqual(at.session_state['fixtures'],[fixture])
+        self.assertTrue(any('rescheduling requires review' in w.value for w in at.warning))
+
+    def test_lifecycle_preview_only_reads_saved_cache(self):
+        from unittest.mock import Mock
+        store=Mock();store.get.side_effect=lambda kind,key: {} if kind=='workspace' else None
+        store.log.return_value=[]
+        store.audit_snapshot.return_value=dict(inventory=[],versions=[],current={},api=[('synthetic:PL:2026',[{**self.match,'score':{'fullTime':{'home':1,'away':0},'duration':'REGULAR'}}])])
+        at=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'))
+        at.secrets['SIG_DATABASE_URL']='synthetic-dsn';at.secrets['SIG_OWNER_PASSWORD']='synthetic-owner'
+        at.session_state['archive_password']='synthetic-owner'
+        with patch('persistent_store.Store',return_value=store),patch('urllib.request.urlopen') as network:
+            at.run(timeout=20)
+            next(b for b in at.button if b.label=='Undersøg PostgreSQL uden downloads').click().run(timeout=20)
+            self.assertEqual(len(at.exception),0)
+            report,_=at.session_state['_postgres_audit']
+            self.assertEqual(report['cache_lifecycle']['summary'],{'new_record_review':1})
+            network.assert_not_called();store.save_workspace.assert_not_called();store.reserve.assert_not_called()

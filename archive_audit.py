@@ -7,6 +7,7 @@ import hashlib
 import zipfile
 from pathlib import PurePosixPath
 from collections import defaultdict, Counter
+from match_lifecycle import preview as lifecycle_preview
 
 FIELDS=('match_id','home_team_id','away_team_id','kickoff_utc','source','season','status','known_at')
 
@@ -29,7 +30,8 @@ def normalize_cached(matches,code,season):
             home=h.get('name'),away=a.get('name'),match_id=str(m.get('id') or ''),
             home_team_id=str(h.get('id') or ''),away_team_id=str(a.get('id') or ''),
             kickoff_utc=m.get('utcDate'),status=m.get('status'),source='football-data.org',
-            home_goals=score.get('home'),away_goals=score.get('away'),stage=m.get('stage')))
+            home_goals=score.get('home'),away_goals=score.get('away'),stage=m.get('stage'),
+            provider_updated_at=m.get('lastUpdated'),score_duration=(m.get('score') or {}).get('duration')))
     return rows
 
 def summarize(rows,scope):
@@ -96,8 +98,17 @@ def enrich_from_cache(rows,cached):
 def merge_metadata(existing,incoming):
     """Prevent sparse CSV/API updates from erasing documented identity metadata."""
     index={natural(r):dict(r) for r in existing}
+    by_identity=defaultdict(set)
+    for existing_row in existing:
+        identity=(existing_row.get('source'),str(existing_row.get('match_id') or ''))
+        if all(identity):by_identity[identity].add(natural(existing_row))
     for row in incoming:
         key=natural(row);old=index.get(key,{})
+        identity=(row.get('source'),str(row.get('match_id') or ''))
+        if all(identity) and any(stored_key!=key for stored_key in by_identity[identity]):
+            raise ValueError('Same source match ID on another date/team key; rescheduling requires review')
+        if old.get('status')=='FINISHED' and row.get('status') and row['status']!='FINISHED':
+            raise ValueError('A finished result cannot be downgraded by an import')
         for field in FIELDS:
             if field=='status':continue
             if old.get(field) and row.get(field) and str(old[field])!=str(row[field]):
@@ -105,6 +116,7 @@ def merge_metadata(existing,incoming):
         if valid_score(old) and valid_score(row) and any(float(old[f])!=float(row[f]) for f in ('home_goals','away_goals')):
             raise ValueError('Import has conflicting final score')
         index[key]={**old,**{k:v for k,v in row.items() if v is not None and v!=''}}
+        if all(identity):by_identity[identity].add(key)
     return list(index.values())
 
 def build_report(snapshot,session):
@@ -135,7 +147,7 @@ def build_report(snapshot,session):
             research=summarize(data.get('research_competitions_40',[]),'postgres:workspace_version:research')))
     excluded=[dict(competition=r['league'],season=r['season'],match_id=r['match_id'],status=r['status'],date=r['date'],home=r['home'],away=r['away'])
               for r in cached if r.get('status') not in ('FINISHED','SCHEDULED','TIMED')]
-    return dict(provider_bundles=bundles,raw_files=raw_files,historical_versions=historical_versions,cache_exclusions=excluded,generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+    return dict(cache_lifecycle=lifecycle_preview(current.get('history',[])+current.get('fixtures',[]),cached),provider_bundles=bundles,raw_files=raw_files,historical_versions=historical_versions,cache_exclusions=excluded,generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
         scope='All sig_archive records inventoried in one read-only repeatable-read transaction; current workspace and every API cache audited. Every workspace version and archived source CSV audited separately; versions and sources must not be added as unique matches. Provider ZIP members are audited in memory within explicit size limits; member errors or skipped entries are recorded. Raw CSV row seasons remain unknown unless explicit.',
         inventory=snapshot['inventory'],versions=snapshot['versions'],coverage=summary,
         empty_research_competitions=sorted(set(('CL','EL','UCL','EC','WC','QUFA','FAC','FLC','DFB','CDR'))-{r.get('competition') for r in current.get('research_competitions_40',[])})),cached
