@@ -18,6 +18,7 @@ import pandas as pd
 import streamlit as st
 from sig_model import Engine, load_history, value_rows
 from model_lab import compare_variants
+from league_lab import test_pooling
 from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
 from benchmark_diagnostics import diagnostic_tables
 from historical_coverage import audit_uploaded_files
@@ -640,6 +641,38 @@ with st.expander('7 · Bookmaker-laboratorium 3.8', expanded=False):
             st.caption('En bedre historisk Brier-score er ikke dokumentation for profit. Udvælgelse af model E efter tidligere test er ikke uafhængig validering. Odds fra forskellige udbydere sammenblandes ikke på den enkelte kamp.')
         if excluded['no_odds'] or excluded['opening_only']:
             st.caption(f'Sprunget over: {excluded["no_odds"]//2} kampe uden gyldige odds og {excluded["opening_only"]//2} kun med opening odds.')
+
+with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
+    st.caption('Sammenligner fælles, ligaspecifik og delvist sammenlagt Elo-vægt. Kun træningsperioden bruges til at vælge parametre. Normal SIG-model ændres ikke.')
+    league_hist=st.session_state.get('history',[])
+    if league_hist:
+        dates=sorted(dt.date.fromisoformat(r['date'][:10]) for r in league_hist)
+        first,last=dates[0],dates[-1]
+        suggested=first+dt.timedelta(days=max(120,int((last-first).days*.70)))
+        boundary=st.date_input('Første testdato',value=min(suggested,last),min_value=first,max_value=last,key='league_test_start')
+        if st.button('Test tre ligamodeller',key='run_league_pooling'):
+            with st.spinner('Træner på historik og tester på senere kampe…'):
+                records,params=test_pooling(league_hist,boundary,last+dt.timedelta(days=1))
+                st.session_state['league_pooling_result']=(records,params,len(league_hist),boundary.isoformat())
+        result=st.session_state.get('league_pooling_result')
+        if result:
+            records,params,old_len,old_date=result
+            if old_len!=len(league_hist) or old_date!=boundary.isoformat():
+                st.warning('Data eller testperiode er ændret. Kør testen igen.')
+            elif records:
+                frame=pd.DataFrame(records)
+                st.markdown('**Samlet prognosekvalitet på testperioden**')
+                st.dataframe(frame.groupby('model',as_index=False).agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean')).round(4),hide_index=True,use_container_width=True)
+                st.markdown('**Resultat pr. liga**')
+                st.dataframe(frame.groupby(['league','model'],as_index=False).agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean')).round(4),hide_index=True,use_container_width=True)
+                st.markdown('**Elo-vægt valgt fra træningsperioden**')
+                st.dataframe(pd.DataFrame(params).round(3),use_container_width=True)
+                st.download_button('Download ligatest (CSV)',to_csv(records,list(records[0])),'sig_league_39.csv','text/csv',key='download_league_lab')
+                st.caption('Dette er kun en test af ligavise Elo-parametre. Separate angrebs- og forsvarsstyrker kommer i en senere variant. Tidligere modelvalg kan have påvirket testdesignet.')
+            else:
+                st.warning('Ingen tilstrækkelig testhistorik. Hent flere sæsoner eller vælg en senere teststart.')
+    else:
+        st.info('Indlæs kampresultater i sektion 1 først.')
 
 st.divider()
 st.caption('Football data provided by the Football-Data.org API')
