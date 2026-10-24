@@ -1,6 +1,7 @@
 # SIG Betting Model – Chrome på iPhone
 
 Projektets fælles arbejdsregler findes i [PRINCIPLES.md](PRINCIPLES.md).
+Se [den genberegnede historiske test](reports/backtest_recomputed_2026-10-24.md).
 Se [den gennemførte 90-minutterskorrektion](reports/regular_time_correction_2026-10-24.md).
 Se [kampstatusregler og fund om målvarighed](reports/match_lifecycle_2026-10-24.md).
 Se [den faktiske datadækning og rettelser](reports/data_quality_2026-10-24.md).

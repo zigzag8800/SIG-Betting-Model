@@ -1,0 +1,28 @@
+{
+  "database_read_at": "2026-10-24T13:00:55.743061+00:00",
+  "revision_equals_ui_export": true,
+  "analysis_status": {
+    "backtest_results": "stored"
+  },
+  "workspace_versions": 11,
+  "correction_checks": [
+    {
+      "id": "ffb38e269e1db96a29df209667de918f14f256830fc15a2c4ad9eee784926d9d",
+      "source": "football-data.org",
+      "match_id": "557838",
+      "corrected_at": "2026-10-24T11:40:54.183434+00:00",
+      "before_score": [
+        2,
+        1
+      ],
+      "after_score": [
+        0,
+        0
+      ],
+      "previous_workspace_present": true,
+      "previous_result_preserved": true,
+      "current_result_matches_record": true
+    }
+  ],
+  "audit_export_sha256": "9b330b6c31448d849aafb2704cdfee0af93006b90e40c7ba51f96400dcf88f1a"
+}

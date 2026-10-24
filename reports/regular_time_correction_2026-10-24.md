@@ -1,5 +1,7 @@
 # Gennemført 90-minutters rettelse – 24. oktober 2026
 
+**Opfølgning:** [Den berørte historiske test er nu genberegnet og gemt](backtest_recomputed_2026-10-24.md). Nedenstående beskriver selve datakorrektionen.
+
 ## Resultat
 
 Southampton FC – Middlesbrough FC, 12. maj 2026, er nu gemt med **0–0** som

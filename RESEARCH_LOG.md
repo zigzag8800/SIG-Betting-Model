@@ -90,3 +90,17 @@ Rettelsen er nu anvendt og verificeret mod en ny PostgreSQL-læsning: original
 117 tests og grøn CI #63, inklusive appforløb med både vellykket commit og
 samtidighedsfejl. Se [rapport og kildebevis](reports/regular_time_correction_2026-10-24.md).
 Der er ikke kørt nye leverandørkald, ny modeloptimering eller en ny backtest her.
+
+## 24. oktober 2026 – kontrolleret genberegning
+
+Opgaven var at genberegne den berørte test med samme indstillinger, ikke at udvikle
+en ny statistisk metode. Egen kildekode, bevaret databaseversion, replay af gammel
+historik og en ny læsetransaktion er primære beviser. Tidligere loggede forum- og
+metodekilder gav baggrund for kontrol af leakage, men bruges ikke som belæg for
+resultattallene. Ingen nye eksterne datakilder, insiderpåstande eller modelparametre.
+
+Den gamle test reproduceres på 2.398 identiske kampe. Formjustering fra, ingen
+managerskift og cutoff 24. oktober 2026. Én inputkamp rettet, 96 senere prognoser
+ændret i Championship, Top 5 uændret. Samlet Brier/log-loss bliver lidt højere.
+123 tests og grøn CI #64; ny test og sammenligning er bekræftet i PostgreSQL.
+Se [resultater, metode og begrænsninger](reports/backtest_recomputed_2026-10-24.md).
