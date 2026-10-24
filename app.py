@@ -20,6 +20,7 @@ from sig_model import Engine, load_history, value_rows
 from model_lab import compare_variants
 from league_lab import test_pooling, audit_pooling, parameter_search_report
 from compare_40 import compare_sig_e_40, summarize_pairs, validate_pairs
+from schedule_features_40 import schedule_features, TOP_FIVE
 from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
 from benchmark_diagnostics import diagnostic_tables
 from historical_coverage import audit_uploaded_files
@@ -98,7 +99,7 @@ class ArchivedCSV:
     def getvalue(self):
         return self.raw
 
-LEAGUES={'Premier League':'PL','Championship':'ELC','La Liga':'PD','Serie A':'SA','Bundesliga':'BL1','Ligue 1':'FL1'}
+LEAGUES={'Premier League':'PL','La Liga':'PD','Serie A':'SA','Bundesliga':'BL1','Ligue 1':'FL1'}
 ALL_LEAGUES={**LEAGUES,'Superliga':'DK1'}
 MARKET_LABELS={'1':'Hjemmesejr','X':'Uafgjort','2':'Udesejr','1X':'1X','X2':'X2','12':'12','O1.5':'Over 1,5 mål','O2.5':'Over 2,5 mål','O3.5':'Over 3,5 mål','U2.5':'Under 2,5 mål','U3.5':'Under 3,5 mål','U4.5':'Under 4,5 mål','BTTS_Y':'Begge scorer: ja','BTTS_N':'Begge scorer: nej','H_O0.5':'Hjemmehold scorer','H_O1.5':'Hjemmehold over 1,5 mål','A_O0.5':'Udehold scorer','A_O1.5':'Udehold over 1,5 mål'}
 HIST_FIELDS=['date','league','home','away','home_goals','away_goals']
@@ -706,8 +707,21 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
         st.info('Indlæs kampresultater i sektion 1 først.')
 
 with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expanded=False):
+    st.info('Kun Europas top 5 indgår i dette forsøg. Championship-historik er bevaret i arkivet, men frasorteres fra nye SIG 4.0-tests. Belastningsdata påvirker endnu ikke prognoserne.')
+    st.markdown('**Kampprogram på tværs af turneringer – datakontrol**')
+    st.caption('Upload et verificeret kampprogram som CSV. Påkrævede kolonner: date, home, away, league, competition_type, known_at, status. Tilladte competition_type: league, champions_league, europa_league, conference_league, domestic_cup, other. known_at er datoen hvor oplysningerne var kendt.')
+    schedule_upload=st.file_uploader('Upload kampprogram (CSV)',type=['csv'],key='schedule_40_upload')
+    if schedule_upload:
+        try:
+            schedule_rows=parse_upload(schedule_upload,['date','home','away','league','competition_type','known_at','status'])
+            competition_counts=pd.DataFrame(schedule_rows).groupby('competition_type',as_index=False).size()
+            st.dataframe(competition_counts,hide_index=True,use_container_width=True)
+            st.caption('Kampprogrammet kontrolleres her, men er ikke endnu koblet til prognosemotoren. Navne eller hold-ID skal matche på tværs af kilder.')
+        except (ValueError,KeyError) as exc:
+            st.error(f'Kan ikke læse kampprogram: {exc}')
+
     st.caption('Ny modstanderjusteret målmodel sammenlignes med SIG E på nøjagtig samme historiske kampe. Kun kampresultater før hver prognose anvendes. Ingen nye data downloades.')
-    research_history=st.session_state.get('history',[])
+    research_history=[r for r in st.session_state.get('history',[]) if r.get('league') in TOP_FIVE]
     if research_history:
         research_dates=sorted(dt.date.fromisoformat(r['date'][:10]) for r in research_history)
         research_first,research_last=research_dates[0],research_dates[-1]
