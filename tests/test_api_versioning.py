@@ -4,6 +4,20 @@ from unittest.mock import MagicMock
 from persistent_store import Store, content_key
 
 class ApiVersioningTests(unittest.TestCase):
+    def test_generic_cache_write_cannot_bypass_versions(self):
+        store=object.__new__(Store)
+        store.put_api_matches=MagicMock(return_value='saved')
+        self.assertEqual(store.put('api_matches','scope:PL:2026',[{'id':1}]),'saved')
+        store.put_api_matches.assert_called_once_with('scope:PL:2026',[{'id':1}])
+
+    def test_generic_write_cannot_mutate_immutable_versions(self):
+        from persistent_store import StorageError
+        store=object.__new__(Store)
+        store.connect=MagicMock()
+        with self.assertRaises(StorageError):
+            store.put('api_matches_version','any-key',{'matches':[]})
+        store.connect.assert_not_called()
+
     def test_atomic_version_insert_precedes_cache_update(self):
         store=object.__new__(Store)
         conn=MagicMock()
