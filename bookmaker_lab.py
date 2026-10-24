@@ -7,6 +7,9 @@ import csv
 import datetime as dt
 import io
 import math
+import zipfile
+from pathlib import PurePosixPath
+from types import SimpleNamespace
 from historical_coverage import DIVISIONS
 from model_lab import compare_variants
 
@@ -24,10 +27,56 @@ def parse_date(value):
             pass
     raise ValueError('Ukendt datoformat: '+v[:24])
 
-def parse_historical_csv(files):
+PROVIDERS={'B365':(('B365CH','B365CD','B365CA'),('B365H','B365D','B365A')),
+           'Avg':(('AvgCH','AvgCD','AvgCA'),None),
+           'PS':(('PSCH','PSCD','PSCA'),None)}
+PINNACLE_WARNING_FROM='2025-07-23'
+
+def expand_historical_files(files):
+    '''Read only the six target divisions; never extract ZIP paths to disk.'''
+    output=[]
+    total=0
+    for item in files:
+        raw=item.getvalue()
+        if item.name.lower().endswith('.zip'):
+            if len(raw)>20*1024*1024:
+                raise ValueError('ZIP større end 20 MB')
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                if len(archive.infolist())>100:
+                    raise ValueError('ZIP indeholder for mange filer')
+                for entry in archive.infolist():
+                    path=PurePosixPath(entry.filename)
+                    if path.is_absolute() or '..' in path.parts or entry.flag_bits & 1:
+                        raise ValueError('Usikker eller krypteret ZIP-post')
+                    if path.suffix.lower()!='.csv' or path.stem.upper() not in DIVISIONS:
+                        continue
+                    if entry.file_size>MAX_BYTES:
+                        raise ValueError('CSV i ZIP større end 5 MB')
+                    total+=entry.file_size
+                    if total>30*1024*1024:
+                        raise ValueError('De valgte CSV-filer fylder over 30 MB')
+                    payload=archive.read(entry)
+                    output.append(SimpleNamespace(name=item.name+'/'+path.name,getvalue=lambda data=payload:data))
+        else:
+            if len(raw)>MAX_BYTES:
+                raise ValueError('CSV større end 5 MB')
+            total+=len(raw)
+            if total>30*1024*1024:
+                raise ValueError('CSV-filer fylder over 30 MB')
+            output.append(item)
+    if files and not output:
+        raise ValueError('Ingen CSV-filer for E0, E1, SP1, I1, D1 eller F1 fundet')
+    return output
+
+
+def parse_historical_csv(files, provider='B365'):
+    if provider not in PROVIDERS:
+        raise ValueError('Ukendt oddsreference')
+    closing_fields,opening_fields=PROVIDERS[provider]
+    price_sets=[closing_fields]+([opening_fields] if opening_fields else [])
     matches={}
     rejected=0
-    for item in files:
+    for item in expand_historical_files(files):
         raw=item.getvalue()
         if len(raw)>MAX_BYTES:
             raise ValueError(item.name+': CSV større end 5 MB')
@@ -42,25 +91,27 @@ def parse_historical_csv(files):
                 h=row['HomeTeam'].strip()
                 a=row['AwayTeam'].strip()
                 hg=int(row['FTHG']); ag=int(row['FTAG'])
-                if not h or not a: raise ValueError('manglende hold')
+                if not h or not a or hg<0 or ag<0: raise ValueError('ugyldigt hold/resultat')
             except (ValueError,TypeError,AttributeError):
                 rejected+=1; continue
             code={'E0':'PL','E1':'ELC','SP1':'PD','I1':'SA','D1':'BL1','F1':'FL1'}[div]
             key=(d,code,h,a)
-            odds=None; provider=None; odds_type=None
-            for fields in CLOSING_SETS+OPENING_SETS:
+            odds=None; odds_provider=None; odds_type=None
+            for fields in price_sets:
+                if provider=='PS' and d>=PINNACLE_WARNING_FROM:
+                    continue
                 try:
                     prices=[float(row.get(x,'')) for x in fields]
                     if all(math.isfinite(p) and p>1.0 for p in prices):
-                        odds=prices;provider=fields[0].removesuffix('CH').removesuffix('H')
-                        odds_type='closing' if fields in CLOSING_SETS else 'opening'
+                        odds=prices;odds_provider=provider
+                        odds_type='closing' if fields==closing_fields else 'opening'
                         break
                 except (ValueError,TypeError):
                     continue
             # Only accept a duplicate if it carries better price coverage.
             candidate={'date':d,'league':code,'home':h,'away':a,
                        'home_goals':hg,'away_goals':ag,
-                       '_odds':odds,'_odds_type':odds_type,'_provider':provider}
+                       '_odds':odds,'_odds_type':odds_type,'_provider':odds_provider}
             if key not in matches or (matches[key]['_odds_type']!='closing' and odds_type=='closing') or (not matches[key]['_odds'] and odds):
                 matches[key]=candidate
     return list(matches.values()),rejected

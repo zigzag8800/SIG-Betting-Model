@@ -17,7 +17,7 @@ import pandas as pd
 import streamlit as st
 from sig_model import Engine, load_history, value_rows
 from model_lab import compare_variants
-from bookmaker_lab import parse_historical_csv, compare_to_bookmaker
+from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
 from historical_coverage import audit_uploaded_files
 from types import SimpleNamespace
 
@@ -50,7 +50,7 @@ else:
 
 PERSIST_KEYS=('history','fixtures','odds','loaded_combos','source_label','api_fetch_report',
               'historical_bookmaker_files','backtest_results','backtest_signature',
-              'lab_rows','lab_signature','benchmark_result','imported_backtests')
+              'lab_rows','lab_signature','benchmark_result','benchmark_signature','imported_backtests')
 
 def restore_types(value):
     # JSON stores tuples as lists; signatures must preserve their comparison type.
@@ -79,6 +79,13 @@ def archive_uploads(files):
         STORE.put('source_csv',hashlib.sha256(raw).hexdigest(),item)
         saved.append(item)
     st.session_state['historical_bookmaker_files']=saved
+
+def prepare_historical_uploads(files):
+    try:
+        return expand_historical_files(files)
+    except Exception as exc:
+        st.error('Historikfilen kunne ikke indlæses: '+str(exc))
+        return []
 
 class ArchivedCSV:
     def __init__(self,item):
@@ -343,10 +350,11 @@ with st.expander('1b · Historiske statistikdata – datadækning',expanded=Fals
     if st.session_state.get('auto_stat_errors'):
         st.warning('Tidligere hentefejl: '+'; '.join(st.session_state['auto_stat_errors']))
 
-    audits=st.file_uploader('Vælg en eller flere historiske CSV-filer',type='csv',accept_multiple_files=True,key='audit_csv')
+    audits=st.file_uploader('Vælg historiske CSV-filer eller sæson-ZIP',type=['csv','zip'],accept_multiple_files=True,key='audit_csv')
     if audits:
-        archive_uploads(audits)
-        table=audit_uploaded_files(audits)
+        expanded_audits=prepare_historical_uploads(audits)
+        archive_uploads(expanded_audits)
+        table=audit_uploaded_files(expanded_audits)
         st.dataframe(pd.DataFrame(table),hide_index=True,use_container_width=True)
         good=[r for r in table if not r.get('Fejl') and r.get('Kampe',0)>0]
         st.metric('Kampe med læsbar ligakode',sum(r['Kampe'] for r in good))
@@ -552,16 +560,18 @@ with st.expander('7 · Bookmaker-laboratorium 3.8', expanded=False):
     st.caption('Sammenligner SIG A og E med marginjusterede 1X2-odds på præcis de samme afsluttede kampe. Kampresultater og odds kommer fra samme CSV-kilde – ikke fra et usikkert holdnavne-match.')
     stored=[ArchivedCSV(x) for x in st.session_state.get('historical_bookmaker_files',[]) if isinstance(x,dict)]
     st.caption('Genbruger allerede hentede historiske statistikfiler fra sektion 1b. Du kan også uploade filer her. Undgå ekstra automatiske downloads af hensyn til kildens begrænsninger.')
-    uploaded=st.file_uploader('Alternativt: CSV-filer med historiske odds',type='csv',accept_multiple_files=True,key='benchmark_files')
+    uploaded=st.file_uploader('CSV-filer eller sæson-ZIP med historiske odds',type=['csv','zip'],accept_multiple_files=True,key='benchmark_files')
     if uploaded:
-        archive_uploads(uploaded)
-    selected=list(uploaded) if uploaded else stored
+        archive_uploads(prepare_historical_uploads(uploaded))
+    selected=prepare_historical_uploads(uploaded) if uploaded else stored
+    benchmark_provider=st.selectbox('Fast oddsreference',['B365','Avg','PS'],format_func=lambda x:{'B365':'Bet365 closing','Avg':'Markedsgennemsnit closing','PS':'Pinnacle closing (kun før 23/7-2025)'}[x],key='benchmark_provider')
+    st.caption('Der skiftes ikke oddsreference fra kamp til kamp. Manglende odds frasorteres. Pinnacle fra 23/7-2025 udelades pga. kildens advarsel om forældede priser.')
     closing_only=st.checkbox('Kun dokumenterede closing odds',value=True,key='benchmark_closing')
     if selected:
         st.success(f'{len(selected)} historiske filer klar til test.')
         if st.button('Sammenlign med bookmakerne',key='run_bookmaker_lab'):
             try:
-                benchmark_matches,rejected=parse_historical_csv(selected)
+                benchmark_matches,rejected=parse_historical_csv(selected,provider=benchmark_provider)
                 if not benchmark_matches:
                     st.error('Ingen færdigspillede kampe fundet i filerne.')
                 else:
@@ -572,11 +582,16 @@ with st.expander('7 · Bookmaker-laboratorium 3.8', expanded=False):
                     with st.spinner('Beregner sammenlignelige prognoser og fjerner bookmakerens margin…'):
                         results,excluded=compare_to_bookmaker(benchmark_matches,test_start,last+dt.timedelta(days=1),closing_only)
                     st.session_state['benchmark_result']=(results,excluded,rejected,len(benchmark_matches),test_start.isoformat(),closing_only)
+                    st.session_state['benchmark_signature']=(benchmark_provider,closing_only,tuple(hashlib.sha256(f.getvalue()).hexdigest() for f in selected))
             except Exception as exc:
                 st.error(f'Bookmaker-testfejl: {exc}')
     else:
         st.info('Hent først historiske statistikker under sektion 1b. Så kan de bruges direkte her.')
     result=st.session_state.get('benchmark_result')
+    current_benchmark_signature=(benchmark_provider,closing_only,tuple(hashlib.sha256(f.getvalue()).hexdigest() for f in selected))
+    if result and restore_types(st.session_state.get('benchmark_signature',[]))!=current_benchmark_signature:
+        st.warning('Oddsreference, data eller testvalg er ændret. Kør bookmaker-testen igen.')
+        result=None
     if result:
         rows,excluded,rejected,total,start_date,was_closing=result
         st.caption(f'Datagrunlag: {total} historiske kampe, test fra {start_date}; {"kun closing" if was_closing else "closing eller opening"}. {rejected} ufuldstændige rækker frasorteret.')
