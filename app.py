@@ -803,6 +803,7 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
         try:
             audit40,cached40=build_report(STORE.audit_snapshot(),st.session_state)
             st.session_state['_api_version_status40']=STORE.api_version_status()
+            st.session_state['_schema_inventory40']=STORE.schema_inventory()
             st.session_state['_postgres_audit']=(audit40,cached40)
         except Exception:
             st.error('PostgreSQL-undersøgelsen fejlede; ingen data ændret.')
@@ -813,6 +814,18 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
             st.markdown('**Versionshistorik for API-kamplister (læsekontrol)**')
             st.write(st.session_state['_api_version_status40'])
             st.caption('Kun optælling. Versionerne indeholder parsede kamplister, ikke originale HTTP-svar. Ældre cacheposter får en versionskopi ved næste opdatering; dette dokumenterer ikke historisk known_at.')
+        if st.session_state.get('_schema_inventory40'):
+            schema40=st.session_state['_schema_inventory40']
+            with st.expander('PostgreSQL-skema – read-only objektinventar'):
+                st.caption(schema40['scope'])
+                for label40,key40 in [('Relationer','relations'),('Kolonner','columns'),
+                                      ('Constraints','constraints'),('Indeks','indexes')]:
+                    st.markdown('**'+label40+'**')
+                    st.dataframe(pd.DataFrame(schema40[key40]),hide_index=True,use_container_width=True)
+                st.download_button('Download databaseobjekter (JSON)',
+                    json.dumps(schema40,ensure_ascii=False,indent=2).encode('utf-8'),
+                    'sig_schema_inventory.json','application/json',
+                    key='sig40_download_schema')
         st.dataframe(pd.DataFrame(audit40['inventory']),hide_index=True)
         st.dataframe(pd.DataFrame(audit40['coverage']),hide_index=True)
         for bundle40 in audit40.get('provider_bundles',[]):
