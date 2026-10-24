@@ -74,6 +74,15 @@ class CompetitionArchiveTests(unittest.TestCase):
         self.assertEqual(merged[0]['home_goals'],2)
         self.assertEqual(merged[0]['status'],'FINISHED')
 
+    def test_stale_scheduled_record_cannot_downgrade_result(self):
+        finished=convert_research_matches([self.fixture()],'CL')
+        scheduled={**self.fixture(),'status':'SCHEDULED','score':{}}
+        stale=convert_research_matches([scheduled],'CL')
+        merged,issues=merge_research_matches(finished,stale)
+        self.assertFalse(issues)
+        self.assertEqual(merged[0]['status'],'FINISHED')
+        self.assertEqual(merged[0]['home_goals'],2)
+
     def test_coverage_is_diagnostic(self):
         rows=convert_research_matches([self.fixture()],'CL')
         cl=next(x for x in research_coverage(rows) if x['competition']=='CL')
