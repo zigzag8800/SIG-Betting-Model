@@ -19,6 +19,8 @@ def convert_research_matches(matches, competition):
         kickoff=m.get('utcDate')
         if mid is None or hid is None or aid is None or not kickoff:
             continue
+        if not str(mid).strip() or not str(hid).strip() or not str(aid).strip():
+            continue
         result.append({
             'match_id':str(mid),'competition':competition,
             'home_team_id':str(hid),'away_team_id':str(aid),
@@ -46,12 +48,14 @@ def merge_research_matches(existing,incoming):
         if previous is None:
             index[key]=dict(row)
             continue
-        identity=('competition','home_team_id','away_team_id')
+        identity=('competition','home_team_id','away_team_id','kickoff_utc')
         if any(str(previous.get(f))!=str(row.get(f)) for f in identity):
             conflicts.append({'reason':'conflicting identity','key':key})
             continue
         # Historical publication timestamps cannot be inferred by an update.
-        updated={**previous,**{k:v for k,v in row.items() if v is not None}}
+        # Empty fields and unknown historical timestamps must never erase
+        # values already documented in the archive.
+        updated={**previous,**{k:v for k,v in row.items() if v is not None and v!=''}}
         index[key]=updated
     return list(index.values()),conflicts
 
