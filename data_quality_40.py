@@ -86,6 +86,29 @@ def validate_identity_data(players,memberships,appearances):
         if minute<0 or minute>150:raise ValueError('Ugyldigt antal minutter')
     return True
 
+def club_player_load_summary(players,memberships,appearances,club_id,as_of,window_days=14):
+    """Auditable individual load summary; no invented international-to-club joins.
+
+    An explicit historical membership is required for inclusion. The result is
+    diagnostic only and is never applied to match probabilities.
+    """
+    active=[]
+    for player in players:
+        pid=player.get('player_id')
+        if pid and any(m.get('player_id')==pid and m.get('club_id')==club_id and
+                       day(m['from_date'])<=day(as_of) and
+                       (not m.get('to_date') or day(as_of)<day(m['to_date']))
+                       for m in memberships):
+            active.append(pid)
+    records=[]
+    for pid in sorted(set(active)):
+        load=player_load(appearances,memberships,pid,club_id,as_of,window_days)
+        records.append({'player_id':pid,'club_id':club_id,
+                        'minutes':load['minutes'],
+                        'international_minutes':load['international_minutes'],
+                        'games':load['games']})
+    return records
+
 def player_load(appearances,memberships,player_id,club_id,as_of,window_days=14):
     """Only appearances known before as_of and with matching club membership count."""
     cutoff=day(as_of);floor=cutoff-dt.timedelta(days=window_days)
