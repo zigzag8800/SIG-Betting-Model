@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'league_lab.py'
+      - 'attack_defence_40.py'
       - 'model_lab.py'
       - 'sig_model.py'
       - 'tests/**'
