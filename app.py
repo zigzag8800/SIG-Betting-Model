@@ -50,7 +50,7 @@ else:
 
 PERSIST_KEYS=('history','fixtures','odds','loaded_combos','source_label','api_fetch_report',
               'historical_bookmaker_files','backtest_results','backtest_signature',
-              'lab_rows','lab_signature','benchmark_result')
+              'lab_rows','lab_signature','benchmark_result','imported_backtests')
 
 def restore_types(value):
     # JSON stores tuples as lists; signatures must preserve their comparison type.
@@ -612,6 +612,36 @@ if STORE:
                     st.success('Arkivkontrol bestået: skrivning, læsning fra ny forbindelse, kvote, ventetid og samtidige kald. Ingen leverandørdownloads.')
                 except Exception:
                     st.error('Arkivkontrollen fejlede. Ingen leverandørdownloads udført.')
+            st.markdown('**Importér tidligere backtest**')
+            st.caption('Tidligere resultater arkiveres separat. De bruges ikke som rå kampdata eller som en ny valideret test.')
+            prior_test=st.file_uploader('Tidligere backtest-CSV',type='csv',key='prior_backtest_upload')
+            if st.button('Gem tidligere backtest i arkivet',key='import_prior_backtest'):
+                if prior_test is None:
+                    st.info('Vælg først en CSV-fil.')
+                else:
+                    try:
+                        raw=prior_test.getvalue()
+                        if len(raw)>5*1024*1024:
+                            raise ValueError('Filen må højst være 5 MB.')
+                        parsed=parse_upload(prior_test,['date','league','home','away','actual','p1','px','p2','brier','logloss'])
+                        if not parsed:
+                            raise ValueError('Backtesten indeholder ingen rækker.')
+                        digest=hashlib.sha256(raw).hexdigest()
+                        metadata={'id':digest,'name':prior_test.name,'rows':len(parsed),
+                                  'from':min(r['date'] for r in parsed),'to':max(r['date'] for r in parsed)}
+                        STORE.put('imported_backtest',digest,{**metadata,'content':base64.b64encode(raw).decode('ascii')})
+                        imports=st.session_state.setdefault('imported_backtests',{})
+                        imports[digest]=metadata
+                        updated={k:st.session_state[k] for k in PERSIST_KEYS if k in st.session_state}
+                        st.session_state['_archive_fingerprint']=STORE.save_workspace(updated,st.session_state.get('_archive_fingerprint'))
+                        st.success(f'Tidligere backtest arkiveret: {len(parsed)} rækker. Originalfilen er bevaret.')
+                    except ValueError as exc:
+                        st.error(str(exc))
+                    except Exception:
+                        st.error('Backtesten kunne ikke arkiveres.')
+            imports=st.session_state.get('imported_backtests',{})
+            if imports:
+                st.dataframe(pd.DataFrame(imports.values()),hide_index=True)
             latest_check=STORE.get('diagnostic','latest')
             if latest_check:
                 st.caption('Seneste beståede arkivkontrol: '+latest_check['checked_at'])
