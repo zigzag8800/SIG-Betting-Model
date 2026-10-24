@@ -143,3 +143,24 @@ fund, præcise ændringer, faktisk testbevis, begrænsninger og næste trin. Und
 lange serier af usynlige ændringer. Fortsæt almindeligt autoriseret arbejde
 selvstændigt; statuspauser er ikke en ny generel godkendelsespligt. Stop ved
 brugerens pauseønske. Afslut altid med et tydeligt **NÆSTE STEP**.
+
+## 8. Kampændringer og resultatvarighed
+
+Brug kilde + kamp-ID som permanent identitet; dato/kickoff må kunne ændres uden
+at skabe en ekstra kamp. Statushistorik og originalresultater skal bevares.
+Konkurrerende eller uordnede versioner kræver eksplicit konfliktkontrol; ankomsttid
+og provider lastUpdated må ikke forveksles med historisk known_at.
+Skeln mellem numerisk gyldigt målresultat og korrekt 90-minutters målgrundlag.
+Forlænget spilletid, straffespark, administrativ afgørelse og bookmakerafregning
+er forskellige forhold. En score/fullTime må ikke automatisk bruges som regularTime.
+Se [de testede kontrolregler og det aktuelle fund](reports/match_lifecycle_2026-10-24.md).
+En read-only kontrol er ikke en gennemført datakorrektion eller en implementeret
+versionshistorik; disse trin skal rapporteres særskilt.
+
+For almindelige 1X2-markeder er resultatgrundlaget 90 minutter plus dommerens
+tillægstid; forlænget spilletid og straffespark medregnes ikke. Det gælder både
+åbnings- og closing odds på samme marked. Tidspunktet for prisregistreringen
+ændrer ikke markedets afregningsgrundlag. Vinder af opgøret/går videre er andre
+markeder og må ikke blandes ind i et 90-minutters benchmark. Ved den fundne
+EXTRA_TIME-kamp er det gemte regularTime-resultat 0–0 den relevante kandidat,
+ikke fullTime-resultatet 2–1. Der bygges ingen funktion til tidlige odds hermed.

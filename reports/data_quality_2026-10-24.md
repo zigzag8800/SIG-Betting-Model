@@ -1,5 +1,7 @@
 # Faktisk SIG-datadækning og rettelser – 24. oktober 2026
 
+**Efterfølgende fund:** [kontrollen af målvarighed](match_lifecycle_2026-10-24.md) identificerede én Championship-kamp med ekstra tid. Gyldige måltal nedenfor betyder numerisk gyldige, ikke at alle er dokumenteret som 90-minutters resultater.
+
 ## Konklusion og afgrænsning
 
 PostgreSQL indeholder et brugbart, men begrænset ligaarkiv. Den aktive historik

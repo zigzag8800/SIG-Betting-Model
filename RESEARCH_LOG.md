@@ -50,3 +50,30 @@ databaseaudit, og hvilke begrænsninger forhindrer en stærkere valideringspåst
   ikke belæg for nye databasetal. Ingen nye insiderpåstande blev brugt. En separat
   udviklerforum-/issueundersøgelse blev ikke nødvendig for denne reproducerede
   lokale importfejl; det er ikke en påstand om en fuld litteraturgennemgang.
+
+## 24. oktober 2026 – kampers livscyklus og scorevarighed
+
+Spørgsmål: kan flytninger, sene svar og ændrede slutresultater behandles uden at
+miste historik eller skabe dubletter, og er fullTime altid et 90-minutters resultat?
+
+- football-data.org v4 Match og den korte score/duration-side blev åbnet; den sidste
+  gennemgået fuldt. Primær datakontrakt viser behovet for REGULAR/EXTRA_TIME/
+  PENALTY_SHOOTOUT-kontrol og adskillelse af løbende og afsluttede mål.
+- Microsofts egen event-sourcing-reference (Learn og GitHub) blev undersøgt for
+  bevaret historik, ordering og idempotens. Ingen ekstern kode blev kørt eller ny
+  arkitektur indført; eksisterende workspace, cache og optimistiske låse bevares.
+- Stack Overflow-spørgsmålet om out-of-order events blev åbnet og problem/
+  timestampdiskussion undersøgt. Forumsporet bruges som modargument til blind
+  ankomstsortering, mens kodebeslutningen støttes af egne regressionstests.
+- Digital Spy-indlæg 202–204 blev læst som konkret erfaring med udsættelse og
+  afregning. William Hills originale fodboldregler blev åbnet for regler om
+  postponement/abandonment. Afregningsregler er bookmaker-/markedsafhængige og
+  blev ikke implementeret i modelhistorikken.
+- Søgning efter football-data.org-specifikke GitHub-issues gav ikke en relevant
+  verificeret fejlrapport. Den beskrevne fejl er reproduceret i vores eget merge-
+  og AppTest-flow; ingen påstand om fuldstændig issuegennemgang.
+- Ingen ny statistisk metode eller insiderpåstand undersøgt/indført i denne blok.
+  Tidligere metodeartikler er fortsat baggrund; ændringen vedrører datakontrakt.
+- Reproduceret fund: match 557838, Southampton–Middlesbrough, EXTRA_TIME 2–1 og
+  regularTime 0–0 i den eksisterende cache. Det aktive 2–1-resultat er ikke ændret.
+  [Rapport og kilder](reports/match_lifecycle_2026-10-24.md) angiver test- og livebevis.

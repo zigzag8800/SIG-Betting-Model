@@ -1,0 +1,88 @@
+{
+  "summary": {
+    "unchanged": 4610,
+    "administrative_record": 2,
+    "score_scope_review": 1
+  },
+  "input_existing": 4611,
+  "input_observations": 4613,
+  "coverage_issues": [],
+  "applies_changes": false,
+  "scope": "Read-only comparison of active workspace against already saved API cache. Absence is not deletion and lastUpdated is not known_at.",
+  "decisions_requiring_review": [
+    {
+      "action": "administrative_record",
+      "reason": "Retain administrative status outside played training history",
+      "source": "football-data.org",
+      "match_id": "542704",
+      "home": "FC Nantes",
+      "away": "Toulouse FC",
+      "competition": "FL1",
+      "season": "2025",
+      "score_duration": "REGULAR",
+      "regular_time_score": null,
+      "previous_status": null,
+      "incoming_status": "AWARDED",
+      "previous_kickoff": null,
+      "incoming_kickoff": "2026-05-17T19:00:00Z",
+      "previous_score": null,
+      "incoming_score": [
+        0,
+        0
+      ],
+      "applies_changes": false
+    },
+    {
+      "action": "score_scope_review",
+      "reason": "Full-time score may include extra time or penalties; do not use as 90-minute result",
+      "source": "football-data.org",
+      "match_id": "557838",
+      "home": "Southampton FC",
+      "away": "Middlesbrough FC",
+      "competition": "ELC",
+      "season": "2025",
+      "score_duration": "EXTRA_TIME",
+      "regular_time_score": [
+        0,
+        0
+      ],
+      "previous_status": "FINISHED",
+      "incoming_status": "FINISHED",
+      "previous_kickoff": "2026-05-12T19:00:00Z",
+      "incoming_kickoff": "2026-05-12T19:00:00Z",
+      "previous_score": [
+        2,
+        1
+      ],
+      "incoming_score": [
+        2,
+        1
+      ],
+      "applies_changes": false
+    },
+    {
+      "action": "administrative_record",
+      "reason": "Retain administrative status outside played training history",
+      "source": "football-data.org",
+      "match_id": "564698",
+      "home": "Rayo Vallecano de Madrid",
+      "away": "Athletic Club",
+      "competition": "PD",
+      "season": "2026",
+      "score_duration": "REGULAR",
+      "regular_time_score": null,
+      "previous_status": null,
+      "incoming_status": "CANCELLED",
+      "previous_kickoff": null,
+      "incoming_kickoff": "2026-10-10T12:00:00Z",
+      "previous_score": null,
+      "incoming_score": [
+        0,
+        0
+      ],
+      "applies_changes": false
+    }
+  ],
+  "source_export_sha256": "3525720cc83d77a37ba7a5761915894521387aa9143966ccac5c2daebb23b858",
+  "report_recorded_at_utc": "2026-10-24T11:23:25.202952+00:00"
+}
