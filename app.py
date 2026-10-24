@@ -648,8 +648,21 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
     if league_hist:
         dates=sorted(dt.date.fromisoformat(r['date'][:10]) for r in league_hist)
         first,last=dates[0],dates[-1]
-        suggested=first+dt.timedelta(days=max(120,int((last-first).days*.70)))
-        boundary=st.date_input('Første testdato',value=min(suggested,last),min_value=first,max_value=last,key='league_test_start')
+        # Prefer a season boundary when available; otherwise reserve the newest
+        # 25%% of actual matches (not 30%% of elapsed calendar days).
+        dates_unique=sorted(set(dates))
+        season_starts=[d for d in dates_unique if d.month in (7,8,9) and d.day<=21
+                       and d.year>first.year and (last-d).days>=120]
+        if season_starts:
+            suggested=season_starts[-1]
+        else:
+            suggested=dates[min(len(dates)-1,int(len(dates)*0.75))]
+        boundary=st.date_input('Første testdato',value=suggested,min_value=first,max_value=last,key='league_test_start')
+        train_count=sum(d<boundary for d in dates)
+        test_count=sum(d>=boundary for d in dates)
+        st.caption(f'Træningskampe før {boundary.isoformat()}: {train_count}. Testkampe fra og med datoen: {test_count}. Testen bruger kun tidligere kampresultater.')
+        if train_count<500 or test_count<300:
+            st.warning('Kort trænings- eller testperiode. Resultatet er kun foreløbigt: brug flere historiske sæsoner, hvis de allerede findes i arkivet.')
         if st.button('Test tre ligamodeller',key='run_league_pooling'):
             with st.spinner('Træner på historik og tester på senere kampe…'):
                 records,params=test_pooling(league_hist,boundary,last+dt.timedelta(days=1))
@@ -667,7 +680,7 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
                 st.markdown('**Kontrol af modelvariation**')
                 st.caption(f"Unikke parametersæt: {diagnostic['distinct_parameter_sets']} af 3. Ligadage med målbare forskelle: {diagnostic['groups_with_prediction_difference']} af {diagnostic['league_date_groups']}.")
                 if diagnostic['identical']:
-                    st.error('Kontrollen har opdaget, at modellerne reelt giver identiske prognoser. Sammenligningen kan IKKE bruges til at vurdere, om ligaspecifikke modeller er bedre. Se de valgte Elo-vægte nedenfor.')
+                    st.error('Kontrollen har opdaget, at modellerne reelt giver identiske prognoser. De tilpassede parametre eller prognoser er ens. Sammenligningen kan IKKE afgøre, hvilken ligametode er bedst. Se både Elo-vægt og hjemmebanefordel nedenfor.')
                 else:
                     st.success('Kontrol bestået: modellerne giver forskellige resultater. Det betyder ikke i sig selv, at forskellene er statistisk sikre.')
                 st.markdown('**Samlet prognosekvalitet på testperioden**')
