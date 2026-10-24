@@ -4,6 +4,31 @@ from unittest.mock import MagicMock
 from persistent_store import Store, content_key
 
 class ApiVersioningTests(unittest.TestCase):
+    def test_schema_inventory_is_read_only(self):
+        store=object.__new__(Store)
+        conn=MagicMock()
+        context=MagicMock()
+        context.__enter__.return_value=conn
+        store.connect=lambda: context
+        responses=[
+            [('public','sig_archive','r',True)],
+            [('public','sig_archive','payload','jsonb','NO')],
+            [('public','sig_archive','sig_archive_pkey','p')],
+            [('public','sig_archive','sig_archive_pkey')]
+        ]
+        conn.execute.return_value.fetchall.side_effect=responses
+        result=store.schema_inventory()
+        self.assertEqual(len(result['relations']),1)
+        self.assertEqual(result['relations'][0]['name'],'sig_archive')
+        self.assertEqual(result['columns'][0]['datatype'],'jsonb')
+        self.assertEqual(len(result['constraints']),1)
+        self.assertEqual(len(result['indexes']),1)
+        self.assertEqual(conn.execute.call_count,5)
+        self.assertIn('READ ONLY',conn.execute.call_args_list[0].args[0])
+        self.assertTrue(all(x.args[0].lstrip().startswith('SELECT')
+            for x in conn.execute.call_args_list[1:]))
+        self.assertEqual(context.__exit__.call_count,1)
+
     def test_generic_cache_write_cannot_bypass_versions(self):
         store=object.__new__(Store)
         store.put_api_matches=MagicMock(return_value='saved')
