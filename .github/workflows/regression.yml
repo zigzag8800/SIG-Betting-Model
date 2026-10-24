@@ -1,0 +1,20 @@
+name: SIG regression checks
+on:
+  push:
+    paths:
+      - 'league_lab.py'
+      - 'model_lab.py'
+      - 'sig_model.py'
+      - 'tests/**'
+      - '.github/workflows/regression.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run regression suite
+        run: python -m unittest discover -s tests -v
