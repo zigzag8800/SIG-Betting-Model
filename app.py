@@ -810,9 +810,9 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
         audit40,cached40=st.session_state['_postgres_audit']
         st.caption(audit40['scope'])
         if st.session_state.get('_api_version_status40') is not None:
-            st.markdown('**Rå API-versionshistorik (læsekontrol)**')
+            st.markdown('**Versionshistorik for API-kamplister (læsekontrol)**')
             st.write(st.session_state['_api_version_status40'])
-            st.caption('Kun optælling. Cacheposter uden identisk versionskopi bevares ved næste opdatering; det er ikke et historisk known_at.')
+            st.caption('Kun optælling. Versionerne indeholder parsede kamplister, ikke originale HTTP-svar. Ældre cacheposter får en versionskopi ved næste opdatering; dette dokumenterer ikke historisk known_at.')
         st.dataframe(pd.DataFrame(audit40['inventory']),hide_index=True)
         st.dataframe(pd.DataFrame(audit40['coverage']),hide_index=True)
         for bundle40 in audit40.get('provider_bundles',[]):
