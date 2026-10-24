@@ -4,7 +4,7 @@ Uses verified football-data.org identifiers, never fuzzy team-name matching.
 Does not download provider data or change production forecasts.
 """
 
-RESEARCH_COMPETITIONS=frozenset(('CL','EL','UCL','EC','WC','QUFA'))
+RESEARCH_COMPETITIONS=frozenset(('CL','EL','UCL','EC','WC','QUFA','FAC','FLC','DFB','CDR'))
 
 def convert_research_matches(matches, competition):
     """Normalize supported provider response fields without inventing known_at."""
