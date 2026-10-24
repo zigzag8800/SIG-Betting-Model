@@ -10,13 +10,14 @@ import urllib.error
 import urllib.request
 from persistent_store import content_key, StorageError
 from archive_audit import valid_score
+from regular_time_correction import provider_final_fields
 
 
 def functions():
     tree=ast.parse(Path('app.py').read_text())
     wanted={'api_matches','convert','restore_types','ApiError'}
     module=ast.Module(body=[x for x in tree.body if isinstance(x,(ast.FunctionDef,ast.ClassDef)) and x.name in wanted],type_ignores=[])
-    ns=dict(hashlib=hashlib,json=json,urllib=urllib,STORE=None,valid_score=valid_score)
+    ns=dict(hashlib=hashlib,json=json,urllib=urllib,STORE=None,valid_score=valid_score,provider_final_fields=provider_final_fields)
     exec(compile(module,'app.py','exec'),ns)
     return ns
 

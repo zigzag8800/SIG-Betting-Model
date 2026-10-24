@@ -78,3 +78,49 @@ class AppImportFlows(unittest.TestCase):
             report,_=at.session_state['_postgres_audit']
             self.assertEqual(report['cache_lifecycle']['summary'],{'new_record_review':1})
             network.assert_not_called();store.save_workspace.assert_not_called();store.reserve.assert_not_called()
+
+    def correction_app(self,fail_save=False):
+        import copy
+        from unittest.mock import Mock
+        from persistent_store import content_key,StorageError
+        old=dict(date='2026-05-12',league='ELC',season='2025',home='H',away='A',home_goals=2,away_goals=1,source='football-data.org',match_id='557838',home_team_id='1',away_team_id='2',kickoff_utc='2026-05-12T19:00:00Z',status='FINISHED')
+        state=dict(history=[old],fixtures=[],backtest_results=[dict(brier=.2)],backtest_signature=[1],lab_rows=[dict(brier=.3)],lab_signature=[1])
+        before=copy.deepcopy(state)
+        response=dict(id=557838,utcDate=old['kickoff_utc'],status='FINISHED',homeTeam=dict(id=1,name='H'),awayTeam=dict(id=2,name='A'),score=dict(fullTime=dict(home=2,away=1),regularTime=dict(home=0,away=0),duration='EXTRA_TIME'))
+        store=Mock();store.get.side_effect=lambda kind,key:copy.deepcopy(state) if kind=='workspace' else None;store.log.return_value=[]
+        store.audit_snapshot.side_effect=lambda:dict(current=copy.deepcopy(state),api=[('hash:ELC:2025',[response])],inventory=[],versions=[])
+        def save(updated,expected):
+            if fail_save:raise StorageError('concurrent update')
+            self.assertEqual(expected,content_key(state))
+            state.clear();state.update(copy.deepcopy(updated));return content_key(state)
+        store.save_workspace.side_effect=save
+        at=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'));at.secrets['SIG_DATABASE_URL']='synthetic-dsn';at.secrets['SIG_OWNER_PASSWORD']='synthetic-owner';at.session_state['archive_password']='synthetic-owner'
+        return at,store,state,before
+
+    def test_regular_time_correction_commits_then_updates_ui_and_invalidates(self):
+        at,store,state,before=self.correction_app()
+        with patch('persistent_store.Store',return_value=store),patch('urllib.request.urlopen') as network:
+            at.run(timeout=20)
+            next(b for b in at.button if b.label=='Undersøg PostgreSQL uden downloads').click().run(timeout=20)
+            next(b for b in at.button if b.label=='Gem 0–0 efter 90 minutter med bevaret original').click().run(timeout=20)
+            self.assertEqual(len(at.exception),0)
+            self.assertEqual(state['history'][0]['home_goals'],0)
+            self.assertEqual(state['data_corrections'][0]['before']['home_goals'],2)
+            self.assertEqual(state['backtest_results'],before['backtest_results'])
+            self.assertEqual(state['backtest_signature'][0],'STALE_AFTER_DATA_CORRECTION')
+            self.assertTrue(any('Datakorrektion gemt' in i.value for i in at.info))
+            next(b for b in at.button if b.label=='Undersøg PostgreSQL uden downloads').click().run(timeout=20)
+            self.assertEqual(at.session_state['_postgres_audit'][0]['cache_lifecycle']['summary'],{'verified_regular_time':1})
+            self.assertFalse(any(b.label=='Gem 0–0 efter 90 minutter med bevaret original' for b in at.button))
+            network.assert_not_called();store.reserve.assert_not_called()
+
+    def test_failed_correction_never_updates_session_or_test_signatures(self):
+        at,store,state,before=self.correction_app(fail_save=True)
+        with patch('persistent_store.Store',return_value=store),patch('urllib.request.urlopen') as network:
+            at.run(timeout=20)
+            next(b for b in at.button if b.label=='Undersøg PostgreSQL uden downloads').click().run(timeout=20)
+            next(b for b in at.button if b.label=='Gem 0–0 efter 90 minutter med bevaret original').click().run(timeout=20)
+            self.assertEqual(len(at.exception),0);self.assertEqual(state,before)
+            self.assertEqual(at.session_state['history'][0]['home_goals'],2)
+            self.assertTrue(any('concurrent update' in e.value for e in at.error))
+            network.assert_not_called()

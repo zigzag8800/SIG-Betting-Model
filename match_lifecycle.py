@@ -1,6 +1,7 @@
 """Read-only, source-namespaced match change review. Never applies proposals."""
 import datetime as dt
 from collections import Counter, defaultdict
+from persistent_store import content_key
 
 STATES=frozenset(('SCHEDULED','TIMED','IN_PLAY','PAUSED','EXTRA_TIME','PENALTY_SHOOTOUT','FINISHED','POSTPONED','SUSPENDED','CANCELLED','AWARDED'))
 ADMIN=frozenset(('CANCELLED','AWARDED'))
@@ -60,6 +61,11 @@ def classify(previous,incoming):
         return decision('invalid_observation','Kickoff must be UTC and agree with match date')
     if status=='FINISHED' and score(incoming) is None:
         return decision('invalid_observation','FINISHED requires non-negative integer scores')
+    if previous and previous.get('result_scope')=='REGULAR_TIME' and previous.get('regular_time_source_hash')==content_key(incoming):
+        regular=score(dict(home_goals=incoming.get('regular_time_home_goals'),away_goals=incoming.get('regular_time_away_goals')))
+        same_identity=all(str(previous.get(f) or '')==str(incoming.get(f) or '') for f in (*IDENTITY,'league','season','date','home','away','kickoff_utc','status'))
+        if same_identity and regular is not None and score(previous)==regular:
+            return decision('verified_regular_time','Active 90-minute result agrees with archived regularTime; fullTime retained separately')
     if status=='FINISHED' and incoming.get('score_duration')!='REGULAR':
         return decision('score_scope_review','Full-time score may include extra time or penalties; do not use as 90-minute result')
     if previous is None:

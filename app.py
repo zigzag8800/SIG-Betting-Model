@@ -14,6 +14,7 @@ import hmac
 from persistent_store import Store, StorageError, content_key, verify_store
 from archive_audit import build_report, enrich_from_cache, merge_metadata, valid_score
 from closing_source import fetch_closing_archive
+from regular_time_correction import commit_correction, provider_final_fields
 
 import pandas as pd
 import streamlit as st
@@ -59,7 +60,7 @@ else:
 
 PERSIST_KEYS=('history','fixtures','odds','loaded_combos','source_label','api_fetch_report',
               'historical_bookmaker_files','backtest_results','backtest_signature',
-              'lab_rows','lab_signature','benchmark_result','benchmark_signature','imported_backtests','cross_comp_schedule_40','research_players_40','research_memberships_40','research_appearances_40','research_competitions_40')
+              'lab_rows','lab_signature','benchmark_result','benchmark_signature','imported_backtests','cross_comp_schedule_40','research_players_40','research_memberships_40','research_appearances_40','research_competitions_40','data_corrections')
 
 def restore_types(value):
     # JSON stores tuples as lists; signatures must preserve their comparison type.
@@ -77,6 +78,10 @@ if STORE and not st.session_state.get('_archive_restored'):
     except Exception:
         st.error('Arkivet kunne ikke læses. Ingen data overskrives og ingen downloads startes.')
         st.stop()
+
+if st.session_state.get('data_corrections'):
+    latest_correction=st.session_state['data_corrections'][-1]
+    st.info('Datakorrektion gemt: kamp '+latest_correction['match_id']+' anvender 90-minuttersresultatet. Originalscore og korrektion er bevaret; tidligere API-baserede tests skal genberegnes.')
 
 def archive_uploads(files):
     if not STORE or not files:
@@ -230,9 +235,9 @@ def convert(matches, league, season=None):
               'source':'football-data.org',
               'season':str((m.get('season') or {}).get('startDate') or season or '')[:4],
               'status':m.get('status') or ''}
-        score=(m.get('score') or {}).get('fullTime') or {}
-        if m.get('status')=='FINISHED' and valid_score({'home_goals':score.get('home'),'away_goals':score.get('away')}):
-            history.append({**base,'home_goals':score['home'],'away_goals':score['away']})
+        final_fields=provider_final_fields(m.get('score') or {})
+        if m.get('status')=='FINISHED' and final_fields is not None:
+            history.append({**base,**final_fields})
         elif m.get('status') in ('SCHEDULED','TIMED'):
             fixtures.append(base)
     return history, fixtures
@@ -490,7 +495,7 @@ if hist:
                 st.session_state['backtest_results']=back
                 saved,message=save_backtest_to_github(back,asof.isoformat(),form_strength)
                 st.session_state['backtest_save_message']=(saved,message)
-                st.session_state['backtest_signature']=(len(hist),asof.isoformat(),st.session_state.get('source_label',''),form_strength,tuple((r['league'],r['team'],r['start_date']) for r in manager_changes))
+                st.session_state['backtest_signature']=(content_key(hist),asof.isoformat(),st.session_state.get('source_label',''),form_strength,tuple((r['league'],r['team'],r['start_date']) for r in manager_changes))
         back=st.session_state.get('backtest_results',[])
         if 'backtest_save_message' in st.session_state:
             saved,message=st.session_state['backtest_save_message']
@@ -499,7 +504,7 @@ if hist:
                 if not STORE: st.link_button('Se seneste backtest på GitHub','https://github.com/zigzag8800/SIG-Betting-Model/blob/main/reports/latest_backtest.csv')
             else:
                 st.info(message)
-        signature=(len(hist),asof.isoformat(),st.session_state.get('source_label',''),form_strength,tuple((r['league'],r['team'],r['start_date']) for r in manager_changes))
+        signature=(content_key(hist),asof.isoformat(),st.session_state.get('source_label',''),form_strength,tuple((r['league'],r['team'],r['start_date']) for r in manager_changes))
         if back and st.session_state.get('backtest_signature')!=signature:
             st.warning('Kampdata eller analysedato er ændret siden sidste test. Kør backtest igen for aktuelle resultater.')
         elif back:
@@ -563,10 +568,10 @@ with st.expander('6 · Model-laboratorium 3.7 (eksperiment)',expanded=False):
             with st.spinner('Beregner sammenlignelige kronologiske prognoser…'):
                 lab_rows=compare_variants(lab_history,lab_cutoff,lab_start)
                 st.session_state['lab_rows']=lab_rows
-                st.session_state['lab_signature']=(len(lab_history),lab_start.isoformat(),lab_cutoff.isoformat())
+                st.session_state['lab_signature']=(content_key(lab_history),lab_start.isoformat(),lab_cutoff.isoformat())
         lab_rows=st.session_state.get('lab_rows',[])
         if lab_rows:
-            if st.session_state.get('lab_signature')!=(len(lab_history),lab_start.isoformat(),lab_cutoff.isoformat()):
+            if st.session_state.get('lab_signature')!=(content_key(lab_history),lab_start.isoformat(),lab_cutoff.isoformat()):
                 st.warning('Historik eller testperiode er ændret. Kør testen igen.')
             else:
                 lab_df=pd.DataFrame(lab_rows)
@@ -802,6 +807,20 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
                 st.warning('Målgrundlag kræver kontrol: '+str(lifecycle40['summary']['score_scope_review'])+' kampe kan have ukendt varighed, forlænget spilletid eller straffespark. De er ikke automatisk rettet; brug ikke disse resultater som dokumenteret 90-minutters validering.')
             pending40=[r for r in lifecycle40['decisions'] if r['action']!='unchanged']
             if pending40:st.dataframe(pd.DataFrame(pending40),hide_index=True)
+            if STORE and any(r.get('match_id')=='557838' and r.get('action')=='score_scope_review' for r in pending40):
+                st.caption('Konkret rettelse: Southampton–Middlesbrough, 12. maj 2026. Brug gemt regularTime 0–0; bevar fullTime 2–1 efter forlænget spilletid og markér API-baserede tests som forældede.')
+                if st.button('Gem 0–0 efter 90 minutter med bevaret original',key='correct_regular_time_557838'):
+                    try:
+                        corrected40,fingerprint40,record40=commit_correction(STORE,st.session_state.get('_archive_fingerprint'),'football-data.org','557838')
+                        for key40 in PERSIST_KEYS:
+                            if key40 in corrected40:st.session_state[key40]=restore_types(corrected40[key40]) if key40.endswith('_signature') else corrected40[key40]
+                        st.session_state['_archive_fingerprint']=fingerprint40
+                        st.session_state.pop('_postgres_audit',None)
+                        st.rerun()
+                    except (StorageError,ValueError) as exc:
+                        st.error('Rettelsen blev ikke gemt: '+str(exc))
+                    except Exception:
+                        st.error('Rettelsens status kunne ikke bekræftes. Undersøg arkivet før et nyt forsøg.')
             st.download_button('Download kontrol af kampændringer (JSON)',json.dumps(lifecycle40,ensure_ascii=False,indent=2).encode(),
                                'sig_match_lifecycle.json','application/json',key='lifecycle_download')
         st.download_button('Download PostgreSQL-undersøgelse (JSON)',json.dumps(audit40,default=str,ensure_ascii=False,indent=2).encode(),
