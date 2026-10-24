@@ -65,7 +65,7 @@ def expand_historical_files(files):
                 raise ValueError('CSV-filer fylder over 30 MB')
             output.append(item)
     if files and not output:
-        raise ValueError('Ingen CSV-filer for E0, E1, SP1, I1, D1 eller F1 fundet')
+        raise ValueError('Ingen CSV-filer for E0, SP1, I1, D1 eller F1 fundet')
     return output
 
 
@@ -94,7 +94,7 @@ def parse_historical_csv(files, provider='B365'):
                 if not h or not a or hg<0 or ag<0: raise ValueError('ugyldigt hold/resultat')
             except (ValueError,TypeError,AttributeError):
                 rejected+=1; continue
-            code={'E0':'PL','E1':'ELC','SP1':'PD','I1':'SA','D1':'BL1','F1':'FL1'}[div]
+            code={'E0':'PL','SP1':'PD','I1':'SA','D1':'BL1','F1':'FL1'}[div]
             key=(d,code,h,a)
             odds=None; odds_provider=None; odds_type=None
             for fields in price_sets:
