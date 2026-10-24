@@ -9,6 +9,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import json
+import hashlib
+import hmac
+from persistent_store import Store, StorageError, content_key
 
 import pandas as pd
 import streamlit as st
@@ -22,6 +25,67 @@ st.set_page_config(page_title='SIG Betting Model', page_icon='⚽', layout='cent
 st.title('⚽ SIG Betting Model 3.6')
 st.caption('Mobilvenlig analyse · Chrome på iPhone · Ingen automatiske væddemål')
 st.warning('Eksperimentel model: sandsynlighederne er ikke valideret som profitable. Minimumsodds bygger på en foreløbig usikkerhedsmargin.')
+
+# A configured shared archive is private: gate the entire app before reads/writes.
+STORE=None
+storage_dsn=st.secrets.get('SIG_DATABASE_URL','')
+if storage_dsn:
+    owner_password=st.secrets.get('SIG_OWNER_PASSWORD','')
+    if not owner_password:
+        st.error('Permanent lagring kræver SIG_OWNER_PASSWORD i Secrets.')
+        st.stop()
+    entered=st.text_input('Adgang til privat dataarkiv',type='password',key='archive_password')
+    if not hmac.compare_digest(entered.encode(),owner_password.encode()):
+        st.info('Indtast arkivets adgangskode for at fortsætte.')
+        st.stop()
+    try:
+        STORE=Store(storage_dsn)
+        STORE.initialize()
+        st.success('Permanent dataarkiv tilsluttet.')
+    except Exception:
+        st.error('Dataarkivet kunne ikke forbindes. Ingen downloads startes. Kontrollér database og Secrets.')
+        st.stop()
+else:
+    st.info('Permanent lagring er ikke tilsluttet endnu. Den eksisterende sessionstilstand bruges.')
+
+PERSIST_KEYS=('history','fixtures','odds','loaded_combos','source_label','api_fetch_report',
+              'historical_bookmaker_files','backtest_results','backtest_signature',
+              'lab_rows','lab_signature','benchmark_result')
+
+def restore_types(value):
+    # JSON stores tuples as lists; signatures must preserve their comparison type.
+    return tuple(restore_types(x) for x in value) if isinstance(value,list) else value
+
+if STORE and not st.session_state.get('_archive_restored'):
+    try:
+        stored_snapshot=STORE.get('workspace','current')
+        snapshot=stored_snapshot or {}
+        st.session_state['_archive_fingerprint']=content_key(stored_snapshot) if stored_snapshot is not None else None
+        for key,value in snapshot.items():
+            if key in PERSIST_KEYS:
+                st.session_state[key]=restore_types(value) if key.endswith('_signature') else value
+        st.session_state['_archive_restored']=True
+    except Exception:
+        st.error('Arkivet kunne ikke læses. Ingen data overskrives og ingen downloads startes.')
+        st.stop()
+
+def archive_uploads(files):
+    if not STORE or not files:
+        return
+    saved=[]
+    for f in files:
+        raw=f.getvalue()
+        item={'name':f.name,'content':base64.b64encode(raw).decode('ascii')}
+        STORE.put('source_csv',hashlib.sha256(raw).hexdigest(),item)
+        saved.append(item)
+    st.session_state['historical_bookmaker_files']=saved
+
+class ArchivedCSV:
+    def __init__(self,item):
+        self.name=item['name']
+        self.raw=base64.b64decode(item['content'])
+    def getvalue(self):
+        return self.raw
 
 LEAGUES={'Premier League':'PL','Championship':'ELC','La Liga':'PD','Serie A':'SA','Bundesliga':'BL1','Ligue 1':'FL1'}
 ALL_LEAGUES={**LEAGUES,'Superliga':'DK1'}
@@ -45,17 +109,40 @@ def to_csv(rows, fields):
 
 # Cache successful responses only. A denied/rate-limited request is never cached.
 @st.cache_data(ttl=21600, show_spinner=False)
+def session_api_matches(token,league,season):
+    return api_matches(token,league,season)
+
 def api_matches(token, league, season):
+    resource=f'{league}:{season}'
+    scope=hashlib.sha256(token.encode()).hexdigest()[:20]
+    cache_key=f'{scope}:{resource}'
+    reservation=None
+    if STORE:
+        cached=STORE.get('api_matches',cache_key,max_age=21600)
+        if cached is not None:
+            return cached
+        reservation=STORE.reserve('football-data.org',resource)
     url=f'https://api.football-data.org/v4/competitions/{league}/matches?season={season}'
     req=urllib.request.Request(url,headers={'X-Auth-Token':token,'Accept':'application/json','User-Agent':'SIG-Betting-Model/1.1'})
     try:
         with urllib.request.urlopen(req,timeout=25) as response:
-            return json.load(response)['matches']
+            matches=json.load(response)['matches']
+        if STORE:
+            STORE.put('api_matches',cache_key,matches)
+            STORE.finish(reservation,'success')
+        return matches
     except urllib.error.HTTPError as e:
+        if STORE and reservation:
+            cooldown=60
+            try: cooldown=max(60,int(e.headers.get('Retry-After','60')))
+            except (ValueError,TypeError): pass
+            STORE.finish(reservation,f'HTTP {e.code}',cooldown if e.code==429 else 0)
         body=e.read().decode('utf-8','replace')[:180]
         raise ApiError(e.code, body, e.headers.get('Retry-After')) from e
     except Exception as e:
-        raise RuntimeError(f'Kunne ikke hente {league}/{season}: {e}') from e
+        if STORE and reservation:
+            STORE.finish(reservation,'failed')
+        raise RuntimeError(f'Kunne ikke hente {league}/{season}; forsøg registreret.') from e
 
 def save_backtest_to_github(rows, asof, form_strength):
     """Save the latest completed backtest through a narrowly scoped GitHub token.
@@ -63,6 +150,8 @@ def save_backtest_to_github(rows, asof, form_strength):
     Configure BACKTEST_GITHUB_TOKEN in Streamlit Secrets. No token is placed
     in source code or exported CSV files.
     """
+    if STORE:
+        return False, 'Backtest beregnet. Se arkivstatus nederst for permanent lagring.'
     token=st.secrets.get('BACKTEST_GITHUB_TOKEN','')
     if not token:
         return False, 'Opsæt BACKTEST_GITHUB_TOKEN i Streamlit Secrets for automatisk GitHub-lagring.'
@@ -141,7 +230,7 @@ with st.expander('1 · Datakilde',expanded=True):
             else:
                 hist=[]; fixtures=[]; errors=[]; successful=[]; denied=[]; rate_limited=False
                 loaded=st.session_state.setdefault('loaded_combos', {})
-                jobs=[(name, season) for name in chosen for season in sorted(seasons) if f'{LEAGUES[name]}:{season}' not in loaded]
+                jobs=[(name, season) for name in chosen for season in sorted(seasons) if f'{LEAGUES[name]}:{season}' not in loaded or STORE]
                 skipped=len(chosen)*len(seasons)-len(jobs)
                 # Pace requests below the common 10 requests/minute free-tier limit.
                 # An unavailable league is reported; already loaded seasons are skipped.
@@ -153,7 +242,7 @@ with st.expander('1 · Datakilde',expanded=True):
                         if progress is not None:
                             progress.progress((index-1)/len(jobs), text=f'Henter {index} af {len(jobs)}: {name} {season}')
                         try:
-                            matches=api_matches(token,LEAGUES[name],season)
+                            matches=(api_matches if STORE else session_api_matches)(token,LEAGUES[name],season)
                             h,f=convert(matches,LEAGUES[name]); hist+=h; fixtures+=f
                             successful.append(f'{name} {season}: {len(h)} afsluttede, {len(f)} kommende')
                             loaded[f'{LEAGUES[name]}:{season}']={'name':name,'season':season,'history':len(h),'fixtures':len(f)}
@@ -181,7 +270,8 @@ with st.expander('1 · Datakilde',expanded=True):
                     hist=list({(r['date'],r['league'],r['home'],r['away']):r for r in old_h+hist}.values())
                     fixtures=list({(r['date'],r['league'],r['home'],r['away']):r for r in old_f+fixtures}.values())
                     st.session_state['history']=hist
-                    st.session_state['fixtures']=fixtures
+                    finished={(r['date'],r['league'],r['home'],r['away']) for r in hist}
+                    st.session_state['fixtures']=[r for r in fixtures if (r['date'],r['league'],r['home'],r['away']) not in finished]
                     st.session_state['source_label']='football-data.org'
                 st.session_state['api_fetch_report']={'successful':successful,'denied':denied,'errors':errors,'skipped':skipped}
                 if not jobs:
@@ -251,6 +341,7 @@ with st.expander('1b · Historiske statistikdata – datadækning',expanded=Fals
 
     audits=st.file_uploader('Vælg en eller flere historiske CSV-filer',type='csv',accept_multiple_files=True,key='audit_csv')
     if audits:
+        archive_uploads(audits)
         table=audit_uploaded_files(audits)
         st.dataframe(pd.DataFrame(table),hide_index=True,use_container_width=True)
         good=[r for r in table if not r.get('Fejl') and r.get('Kampe',0)>0]
@@ -368,7 +459,7 @@ if hist:
             saved,message=st.session_state['backtest_save_message']
             if saved:
                 st.success(message)
-                st.link_button('Se seneste backtest på GitHub','https://github.com/zigzag8800/SIG-Betting-Model/blob/main/reports/latest_backtest.csv')
+                if not STORE: st.link_button('Se seneste backtest på GitHub','https://github.com/zigzag8800/SIG-Betting-Model/blob/main/reports/latest_backtest.csv')
             else:
                 st.info(message)
         signature=(len(hist),asof.isoformat(),st.session_state.get('source_label',''),form_strength,tuple((r['league'],r['team'],r['start_date']) for r in manager_changes))
@@ -455,9 +546,11 @@ with st.expander('6 · Model-laboratorium 3.7 (eksperiment)',expanded=False):
 
 with st.expander('7 · Bookmaker-laboratorium 3.8', expanded=False):
     st.caption('Sammenligner SIG A og E med marginjusterede 1X2-odds på præcis de samme afsluttede kampe. Kampresultater og odds kommer fra samme CSV-kilde – ikke fra et usikkert holdnavne-match.')
-    stored=st.session_state.get('historical_bookmaker_files',[])
+    stored=[ArchivedCSV(x) for x in st.session_state.get('historical_bookmaker_files',[]) if isinstance(x,dict)]
     st.caption('Genbruger allerede hentede historiske statistikfiler fra sektion 1b. Du kan også uploade filer her. Undgå ekstra automatiske downloads af hensyn til kildens begrænsninger.')
     uploaded=st.file_uploader('Alternativt: CSV-filer med historiske odds',type='csv',accept_multiple_files=True,key='benchmark_files')
+    if uploaded:
+        archive_uploads(uploaded)
     selected=list(uploaded) if uploaded else stored
     closing_only=st.checkbox('Kun dokumenterede closing odds',value=True,key='benchmark_closing')
     if selected:
@@ -500,3 +593,19 @@ with st.expander('7 · Bookmaker-laboratorium 3.8', expanded=False):
 
 st.divider()
 st.caption('SIG Model · Kun analyse · Ingen automatiske spil · Opta, kort, hjørnespark og live bookmakerodds er endnu ikke integreret.')
+
+if STORE:
+    try:
+        snapshot={k:st.session_state[k] for k in PERSIST_KEYS if k in st.session_state}
+        fingerprint=content_key(snapshot)
+        if fingerprint!=st.session_state.get('_archive_fingerprint'):
+            # Preserve immutable versions before updating the convenience pointer.
+            st.session_state['_archive_fingerprint']=STORE.save_workspace(snapshot,st.session_state.get('_archive_fingerprint'))
+        st.caption('Arkivstatus: alle aktuelle data og testresultater er gemt permanent.')
+        with st.expander('Permanent arkiv · downloadhistorik'):
+            st.caption('Råfiler, indlæste data og testresultater bevares efter genstart. Historiske downloads er fortsat deaktiveret, indtil leverandørvilkår og tidligere hentninger er afklaret.')
+            st.dataframe(pd.DataFrame(STORE.log()),hide_index=True)
+    except StorageError as exc:
+        st.error(str(exc))
+    except Exception:
+        st.error('Seneste ændringer kunne ikke gemmes permanent. Behold sessionen og eksportér vigtige resultater.')
