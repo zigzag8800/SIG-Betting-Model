@@ -16,8 +16,13 @@ def coverage_report(history,fixtures,schedule=None,players=None,appearances=None
         subset=[x for x in history if x.get('league')==league]
         future=[x for x in fixtures if x.get('league')==league]
         keys=[(x.get('date'),x.get('home'),x.get('away')) for x in subset]
-        valid=sum(bool(x.get('date') and x.get('home') and x.get('away') and
-                       x.get('home_goals') is not None and x.get('away_goals') is not None) for x in subset)
+        def valid_result(x):
+            if not (x.get('date') and x.get('home') and x.get('away')):return False
+            try:
+                home=int(x['home_goals']);away=int(x['away_goals'])
+                return home>=0 and away>=0 and not isinstance(x['home_goals'],bool) and not isinstance(x['away_goals'],bool)
+            except (ValueError,TypeError,KeyError):return False
+        valid=sum(valid_result(x) for x in subset)
         report.append({'Liga':league,'Afsluttede kampe':len(subset),'Kommende kampe':len(future),
                        'Gyldige resultatrækker':valid,'Dublerede afsluttede kampe':len(keys)-len(set(keys)),
                        'Afsluttede kampe med kamp-ID':sum(bool(x.get('match_id')) for x in subset),
