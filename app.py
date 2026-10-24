@@ -12,6 +12,7 @@ import json
 import hashlib
 import hmac
 from persistent_store import Store, StorageError, content_key, verify_store
+from closing_source import fetch_closing_archive
 
 import pandas as pd
 import streamlit as st
@@ -336,10 +337,10 @@ with st.expander('1b · Historiske statistikdata – datadækning',expanded=Fals
     st.caption('Undersøg dine lokalt hentede CSV-filer fra Football-Data.co.uk. Understøtter E0, E1, SP1, I1, D1 og F1. Automatisk hentning er midlertidigt deaktiveret af hensyn til kildens begrænsninger. Ingen ændring af modelberegninger.')
     st.markdown('[Åbn Football-Data.co.uk sæsonfiler](https://www.football-data.co.uk/downloadm.php)')
     st.caption('Kildens fair-use-regler: kun personlig/akademisk brug og højst to lette automatiske hentninger om ugen. Brug ikke knappen hyppigere, heller ikke efter genstart.')
-    st.warning('Automatisk hentning er midlertidigt slået fra. Streamlit-sessioner overlever ikke nødvendigvis genstart, og vi kan derfor endnu ikke håndhæve kildens ugentlige begrænsning sikkert. Tidligere hentninger kan ikke rekonstrueres.')
-    st.caption('Brug filer, der allerede er hentet, indtil der er opsat et varigt, serveruafhængigt downloadregister og filarkiv.')
+    st.info('Godkendt sæsonhentning findes i sektion 7. Et varigt register begrænser nye downloads til to forsøg pr. syv døgn. Tidligere hentninger uden for registeret kan ikke rekonstrueres.')
+    st.caption('Filer arkiveres permanent og genbruges. En ny leverandørhentning kræver din godkendelse.')
     historical_years=st.multiselect('Sæsoner til historiske statistikker (kun til visning)', [2024,2025,2026], default=[2025,2026], key='stats_seasons')
-    st.button('Automatisk hentning afventer sikker lagring',disabled=True,key='fetch_six_stat_leagues')
+    st.caption('Åbn sektion 7 for at hente eller genbruge den samlede sæsonpakke.')
     if st.session_state.get('auto_stat_coverage'):
         st.markdown('**Historiske data fra den aktuelle session**')
         summary=st.session_state['auto_stat_coverage']
@@ -560,6 +561,25 @@ with st.expander('7 · Bookmaker-laboratorium 3.8', expanded=False):
     st.caption('Sammenligner SIG A og E med marginjusterede 1X2-odds på præcis de samme afsluttede kampe. Kampresultater og odds kommer fra samme CSV-kilde – ikke fra et usikkert holdnavne-match.')
     stored=[ArchivedCSV(x) for x in st.session_state.get('historical_bookmaker_files',[]) if isinstance(x,dict)]
     st.caption('Genbruger allerede hentede historiske statistikfiler fra sektion 1b. Du kan også uploade filer her. Undgå ekstra automatiske downloads af hensyn til kildens begrænsninger.')
+    if STORE:
+        st.caption('Gemte filer genbruges permanent. Nye downloads kræver din godkendelse og begrænses samlet til to forsøg pr. rullende syv døgn. Tidligere hentninger uden for registeret er ukendte; registeret dokumenterer kun nye forsøg.')
+        with st.form('closing_download_approval',clear_on_submit=True):
+            closing_approved=st.checkbox('Jeg godkender ét download af sæsonpakken 2025/26 fra Football-Data.co.uk',value=False)
+            closing_submit=st.form_submit_button('Hent eller genbrug sæsonpakken 2025/26')
+        if closing_submit:
+            try:
+                with st.spinner('Henter eller genbruger én samlet sæsonpakke…'):
+                    bundle,reused=fetch_closing_archive(STORE,approved=closing_approved)
+                    imported_files=expand_historical_files([ArchivedCSV(bundle)])
+                    archive_uploads(imported_files)
+                    updated={k:st.session_state[k] for k in PERSIST_KEYS if k in st.session_state}
+                    st.session_state['_archive_fingerprint']=STORE.save_workspace(updated,st.session_state.get('_archive_fingerprint'))
+                    stored=[ArchivedCSV(x) for x in st.session_state.get('historical_bookmaker_files',[])]
+                st.success(('Genbrugt fra arkivet uden nyt download: ' if reused else 'Sæsonpakke hentet og arkiveret: ')+str(len(imported_files))+' ligafiler.')
+            except (StorageError,ValueError) as exc:
+                st.warning(str(exc))
+            except Exception:
+                st.error('Sæsonpakken kunne ikke hentes eller gemmes. Ingen automatisk gentagelse; forsøget tæller i downloadregisteret.')
     uploaded=st.file_uploader('CSV-filer eller sæson-ZIP med historiske odds',type=['csv','zip'],accept_multiple_files=True,key='benchmark_files')
     if uploaded:
         archive_uploads(prepare_historical_uploads(uploaded))
