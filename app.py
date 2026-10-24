@@ -19,6 +19,7 @@ import streamlit as st
 from sig_model import Engine, load_history, value_rows
 from model_lab import compare_variants
 from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
+from benchmark_diagnostics import diagnostic_tables
 from historical_coverage import audit_uploaded_files
 from types import SimpleNamespace
 
@@ -625,6 +626,16 @@ with st.expander('7 · Bookmaker-laboratorium 3.8', expanded=False):
             league=(bdf.groupby(['variant','league'],as_index=False).agg(kampe=('brier','size'),brier=('brier','mean'),bookmaker_brier=('market_brier','mean')).round(4))
             st.markdown('**Fordelt på liga**')
             st.dataframe(league,hide_index=True,use_container_width=True)
+            st.markdown('**Hvor taber SIG til bookmakerne?**')
+            diag,examples=diagnostic_tables(rows)
+            if diag:
+                diagnostic_df=pd.DataFrame(diag)
+                st.caption('Positiv forskel betyder, at bookmakerens prognose er mere præcis. Hver række sammenligner samme kamp; små grupper er usikre.')
+                st.dataframe(diagnostic_df,hide_index=True,use_container_width=True)
+                st.download_button('Download fejlanalyse (CSV)',to_csv(diag,list(diag[0])),'sig_bookmaker_diagnostics.csv','text/csv',key='export_diagnostics')
+                st.markdown('**De 20 største enkeltkamp-forskelle**')
+                st.dataframe(pd.DataFrame(examples),hide_index=True,use_container_width=True)
+                st.caption('Store fejl på enkeltkampe kan skyldes tilfældigheder. Vi skal sammenligne grupper og teste på andre sæsoner før modelændringer.')
             st.download_button('Download sammenligningen (CSV)',to_csv(rows,list(rows[0])),'sig_vs_bookmakers.csv','text/csv',key='export_benchmark')
             st.caption('En bedre historisk Brier-score er ikke dokumentation for profit. Udvælgelse af model E efter tidligere test er ikke uafhængig validering. Odds fra forskellige udbydere sammenblandes ikke på den enkelte kamp.')
         if excluded['no_odds'] or excluded['opening_only']:
