@@ -748,7 +748,8 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
     st.markdown('**Importér forskningskampe fra ekstra turneringer**')
     st.caption('Bruger eksisterende API-cache og adgangsnøgle. Importér kun de valgte turneringer/sæsoner. Ingen effekt på produktionens prognoser.')
     research_codes40={'Champions League':'CL','Europa League':'EL','Conference League':'UCL',
-                      'EM':'EC','VM':'WC','VM-kvalifikation Europa':'QUFA'}
+                      'EM':'EC','VM':'WC','VM-kvalifikation Europa':'QUFA',
+                      'FA Cup':'FAC','EFL Cup':'FLC','DFB-Pokal':'DFB','Copa del Rey':'CDR'}
     selected_research40=st.multiselect('Forskningsturneringer',list(research_codes40),key='sig40_research_codes')
     season_research40=st.number_input('Sæsonens startår (forskning)',min_value=2010,
                                      max_value=dt.date.today().year,value=dt.date.today().year,step=1,
