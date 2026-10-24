@@ -155,10 +155,10 @@ def api_matches(token, league, season):
     req=urllib.request.Request(url,headers={'X-Auth-Token':token,'Accept':'application/json','User-Agent':'SIG-Betting-Model/1.1'})
     try:
         with urllib.request.urlopen(req,timeout=25) as response:
-            matches=json.load(response)['matches']
+            raw_response=json.load(response)
+            matches=raw_response['matches']
         if STORE:
-            STORE.put('api_matches',cache_key,matches)
-            STORE.finish(reservation,'success')
+            matches=STORE.save_api_response(cache_key,matches,reservation,raw_response=raw_response)
         return matches
     except urllib.error.HTTPError as e:
         if STORE and reservation:
@@ -799,6 +799,13 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
         key='sig40_coverage_export')
     st.caption('Rapporten læser kun den aktive sessions arkivdata og indeholder ingen API-nøgle eller spilleroplysninger.')
     st.markdown('**PostgreSQL – faktisk arkivdækning**')
+    if STORE and st.button('Bevar eksisterende rå API-svar som versioner',key='backfill_api_versions'):
+        try:
+            st.session_state['_api_backfill_report']=STORE.backfill_api_versions()
+            st.success('Rå API-versioner sikret uden leverandørkald. '+str(st.session_state['_api_backfill_report']))
+            st.session_state.pop('_postgres_audit',None)
+        except Exception:
+            st.error('API-versionering kunne ikke bekræftes; ingen leverandørkald startet.')
     if STORE and st.button('Undersøg PostgreSQL uden downloads',key='audit_postgres'):
         try:
             audit40,cached40=build_report(STORE.audit_snapshot(),st.session_state)
@@ -809,6 +816,9 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
         audit40,cached40=st.session_state['_postgres_audit']
         st.caption(audit40['scope'])
         st.dataframe(pd.DataFrame(audit40['inventory']),hide_index=True)
+        if audit40.get('api_version_summary'):
+            st.markdown('**Rå API-versionshistorik**')
+            st.write(audit40['api_version_summary'])
         st.dataframe(pd.DataFrame(audit40['coverage']),hide_index=True)
         for bundle40 in audit40.get('provider_bundles',[]):
             st.write('Gemt ZIP: '+str(bundle40['name'])+' · medlemmer: '+str(len(bundle40['members']))+' · alle kontrolleret: '+str(bundle40['complete']))

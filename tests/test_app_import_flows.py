@@ -153,3 +153,15 @@ class AppImportFlows(unittest.TestCase):
             self.assertEqual(state['backtest_signature'][0],content_key(state['history']))
             self.assertEqual(previous['backtest_results'][4]['actual'],'1')
             network.assert_not_called();store.reserve.assert_not_called()
+
+    def test_api_version_backfill_uses_database_only_and_preserves_workspace(self):
+        from unittest.mock import Mock
+        store=Mock();store.get.side_effect=lambda kind,key:{} if kind=='workspace' else None;store.log.return_value=[]
+        store.backfill_api_versions.return_value=dict(cache_items_checked=12,versions_added=12,provider_downloads=0,cache_ttl_changed=False)
+        at=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'));at.secrets['SIG_DATABASE_URL']='synthetic-dsn';at.secrets['SIG_OWNER_PASSWORD']='synthetic-owner';at.session_state['archive_password']='synthetic-owner'
+        with patch('persistent_store.Store',return_value=store),patch('urllib.request.urlopen') as network:
+            at.run(timeout=20)
+            next(b for b in at.button if b.label=='Bevar eksisterende rå API-svar som versioner').click().run(timeout=20)
+            self.assertEqual(len(at.exception),0);store.backfill_api_versions.assert_called_once()
+            self.assertTrue(any('Rå API-versioner sikret' in s.value for s in at.success))
+            network.assert_not_called();store.reserve.assert_not_called();store.save_workspace.assert_not_called();store.save_api_response.assert_not_called()

@@ -8,6 +8,7 @@ import zipfile
 from pathlib import PurePosixPath
 from collections import defaultdict, Counter
 from match_lifecycle import preview as lifecycle_preview
+from persistent_store import content_key, api_version_valid
 
 FIELDS=('match_id','home_team_id','away_team_id','kickoff_utc','source','season','status','known_at')
 
@@ -149,6 +150,23 @@ def build_report(snapshot,session):
             research=summarize(data.get('research_competitions_40',[]),'postgres:workspace_version:research')))
     excluded=[dict(competition=r['league'],season=r['season'],match_id=r['match_id'],status=r['status'],date=r['date'],home=r['home'],away=r['away'])
               for r in cached if r.get('status') not in ('FINISHED','SCHEDULED','TIMED')]
+    version_checks=[];valid_version_matches=set()
+    current_api=dict(snapshot['api'])
+    for version_key,payload,saved_at in snapshot.get('api_versions',[]):
+        cache_key=payload.get('cache_key','');parts=cache_key.rsplit(':',2)
+        digest=content_key(payload.get('response',payload.get('matches')))
+        valid=api_version_valid(version_key,payload)
+        if valid:valid_version_matches.add((cache_key,content_key(payload.get('matches'))))
+        version_checks.append(dict(resource=':'.join(parts[-2:]),payload_hash=digest,
+            checksum_ok=valid,
+            first_recorded_at=str(saved_at),time_basis=payload.get('origin'),raw_scope=payload.get('raw_scope'),
+            match_records=len(payload.get('matches',[])),
+            is_current_cache_version=cache_key in current_api and content_key(current_api[cache_key])==content_key(payload.get('matches'))))
+    protected=sum((cache_key,content_key(matches)) in valid_version_matches for cache_key,matches in snapshot['api'])
+    api_version_summary=dict(current_cache_records=len(snapshot['api']),protected_current_cache_records=protected,
+        raw_versions=len(version_checks),checksum_failures=sum(not r['checksum_ok'] for r in version_checks),full_json_versions=sum(r['raw_scope']=='full_json' for r in version_checks),
+        download_observations=len(snapshot.get('api_observations',[])),
+        note='Legacy saved_at and new archive timestamps are ingestion evidence, never historical known_at.')
     correction_checks=[]
     versions_by_key=dict(snapshot.get('old_workspaces',[]))
     for correction in current.get('data_corrections',[]):
@@ -164,7 +182,7 @@ def build_report(snapshot,session):
             current_result_matches_record=any(matches(r) and r==after for r in current.get('history',[]))))
     analysis_status={name:('stale' if (current.get(sig) or [None])[0]=='STALE_AFTER_DATA_CORRECTION' else 'stored')
         for name,sig in (('backtest_results','backtest_signature'),('lab_rows','lab_signature')) if name in current}
-    return dict(backtest_revision=current.get('backtest_revision'),data_corrections=current.get('data_corrections',[]),correction_checks=correction_checks,analysis_status=analysis_status,cache_lifecycle=lifecycle_preview(current.get('history',[])+current.get('fixtures',[]),cached),provider_bundles=bundles,raw_files=raw_files,historical_versions=historical_versions,cache_exclusions=excluded,generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+    return dict(api_version_summary=api_version_summary,api_versions=version_checks,backtest_revision=current.get('backtest_revision'),data_corrections=current.get('data_corrections',[]),correction_checks=correction_checks,analysis_status=analysis_status,cache_lifecycle=lifecycle_preview(current.get('history',[])+current.get('fixtures',[]),cached),provider_bundles=bundles,raw_files=raw_files,historical_versions=historical_versions,cache_exclusions=excluded,generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
         scope='All sig_archive records inventoried in one read-only repeatable-read transaction; current workspace and every API cache audited. Every workspace version and archived source CSV audited separately; versions and sources must not be added as unique matches. Provider ZIP members are audited in memory within explicit size limits; member errors or skipped entries are recorded. Raw CSV row seasons remain unknown unless explicit.',
         inventory=snapshot['inventory'],versions=snapshot['versions'],coverage=summary,
         empty_research_competitions=sorted(set(('CL','EL','UCL','EC','WC','QUFA','FAC','FLC','DFB','CDR'))-{r.get('competition') for r in current.get('research_competitions_40',[])})),cached

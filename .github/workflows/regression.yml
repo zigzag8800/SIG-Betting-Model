@@ -11,6 +11,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: sigtest
+          POSTGRES_PASSWORD: sigtest
+          POSTGRES_DB: sigtest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sigtest"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SIG_TEST_DATABASE_URL: postgresql://sigtest:sigtest@localhost:5432/sigtest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
