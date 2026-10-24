@@ -38,22 +38,26 @@ class Store:
                 (kind,key,Jsonb(payload)))
 
     def put_api_matches(self, key, payload):
-        """Atomically preserve each distinct raw API response before cache update.
+        """Preserve pre-existing and new provider snapshots in one transaction.
 
-        Versions are content-addressed and immutable within sig_archive. The
-        existing api_matches cache key and readers remain unchanged.
+        Old cache data must be archived too when this feature first goes live.
+        Snapshot timestamps are observation times, never historical known_at.
         """
         from psycopg.types.json import Jsonb
         digest=content_key(payload)
-        version_key=key+':'+digest
         with self.connect() as conn:
             conn.execute('SELECT pg_advisory_xact_lock(hashtext(%s))',
                          ('sig:api_matches:'+key,))
-            conn.execute('''INSERT INTO sig_archive(kind,key,payload)
-                VALUES('api_matches_version',%s,%s)
-                ON CONFLICT(kind,key) DO NOTHING''',
-                (version_key,Jsonb({'cache_key':key,'sha256':digest,
-                                    'matches':payload})))
+            previous=conn.execute(
+                "SELECT payload FROM sig_archive WHERE kind='api_matches' AND key=%s",
+                (key,)).fetchone()
+            for matches in ([previous[0]] if previous else [])+[payload]:
+                version_hash=content_key(matches)
+                conn.execute('''INSERT INTO sig_archive(kind,key,payload)
+                    VALUES('api_matches_version',%s,%s)
+                    ON CONFLICT(kind,key) DO NOTHING''',
+                    (key+':'+version_hash,Jsonb({'cache_key':key,
+                        'sha256':version_hash,'matches':matches})))
             conn.execute('''INSERT INTO sig_archive(kind,key,payload)
                 VALUES('api_matches',%s,%s)
                 ON CONFLICT(kind,key) DO UPDATE
