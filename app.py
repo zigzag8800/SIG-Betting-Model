@@ -755,9 +755,11 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
                                      max_value=dt.date.today().year,value=dt.date.today().year,step=1,
                                      key='sig40_research_season')
     if st.button('Hent valgte forskningskampe',key='sig40_fetch_research'):
-        api_token40=st.secrets.get('FOOTBALL_DATA_API_KEY','') if hasattr(st,'secrets') else ''
+        # Reuse the token already entered under '1 · Datakilde' when available.
+        # Never persist or expose the token in the research archive.
+        api_token40=(token if source=='football-data.org API' else '') or (st.secrets.get('FOOTBALL_DATA_API_KEY','') if hasattr(st,'secrets') else '')
         if not api_token40:
-            st.warning('Mangler FOOTBALL_DATA_API_KEY i Streamlit Secrets; ingen API-kald udført.')
+            st.warning('Mangler API-nøgle i Datakilde eller Streamlit Secrets; ingen API-kald udført.')
         elif not selected_research40:
             st.warning('Vælg mindst én forskningsturnering.')
         else:
