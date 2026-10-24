@@ -18,7 +18,7 @@ import pandas as pd
 import streamlit as st
 from sig_model import Engine, load_history, value_rows
 from model_lab import compare_variants
-from league_lab import test_pooling
+from league_lab import test_pooling, audit_pooling
 from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
 from benchmark_diagnostics import diagnostic_tables
 from historical_coverage import audit_uploaded_files
@@ -661,6 +661,13 @@ with st.expander('8 · SIG 3.9 – ligamodeller (eksperiment)',expanded=False):
                 st.warning('Data eller testperiode er ændret. Kør testen igen.')
             elif records:
                 frame=pd.DataFrame(records)
+                diagnostic=audit_pooling(records,params)
+                st.markdown('**Kontrol af modelvariation**')
+                st.caption(f"Unikke parametersæt: {diagnostic['distinct_parameter_sets']} af 3. Ligadage med målbare forskelle: {diagnostic['groups_with_prediction_difference']} af {diagnostic['league_date_groups']}.")
+                if diagnostic['identical']:
+                    st.error('Kontrollen har opdaget, at modellerne reelt giver identiske prognoser. Sammenligningen kan IKKE bruges til at vurdere, om ligaspecifikke modeller er bedre. Se de valgte Elo-vægte nedenfor.')
+                else:
+                    st.success('Kontrol bestået: modellerne giver forskellige resultater. Det betyder ikke i sig selv, at forskellene er statistisk sikre.')
                 st.markdown('**Samlet prognosekvalitet på testperioden**')
                 st.dataframe(frame.groupby('model',as_index=False).agg(kampe=('brier','size'),brier=('brier','mean'),logloss=('logloss','mean')).round(4),hide_index=True,use_container_width=True)
                 st.markdown('**Resultat pr. liga**')
