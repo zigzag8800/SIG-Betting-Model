@@ -803,7 +803,11 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
         try:
             audit40,cached40=build_report(STORE.audit_snapshot(),st.session_state)
             st.session_state['_api_version_status40']=STORE.api_version_status()
-            st.session_state['_schema_inventory40']=STORE.schema_inventory()
+            try:
+                st.session_state['_schema_inventory40']=STORE.schema_inventory()
+            except Exception:
+                st.session_state['_schema_inventory40']=None
+                st.warning('Skemainventar kunne ikke læses med denne databaseadgang. Den eksisterende dækningsrapport er stadig tilgængelig.')
             st.session_state['_postgres_audit']=(audit40,cached40)
         except Exception:
             st.error('PostgreSQL-undersøgelsen fejlede; ingen data ændret.')
