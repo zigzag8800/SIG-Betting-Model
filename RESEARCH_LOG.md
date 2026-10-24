@@ -29,3 +29,24 @@ databaseaudit, og hvilke begrænsninger forhindrer en stærkere valideringspåst
 - Undersøgelsen er en indledende vurdering af forudsætninger, ikke en fuldført
   litteraturgennemgang af fodboldmodellering. Næste databasearbejde afgrænses i
   reports/readiness_2026-10-24.md. Ingen leverandørdata blev hentet i denne kontrol.
+
+## 24. oktober 2026 – afslutning af arkivkontrol
+
+- Spørgsmål: indeholder den allerede gemte sæson-ZIP mere end de seks indlæste
+  divisioner, og kan importkonflikter ødelægge tidligere data?
+- [Python 3.11 zipfile](https://docs.python.org/3.11/library/zipfile.html) blev åbnet;
+  memberlæsning og dokumenterede ekstraktions-/ressourceproblemer kontrolleret.
+  Egen implementering læser i hukommelsen med eksplicitte fil-/udvidelsesgrænser.
+- [Leverandørens arkivside](https://football-data.co.uk/downloadm.php) blev søgt
+  for fil- og oddsdefinitioner. Direkte notes.txt-læsning returnerede 429; ingen
+  genforsøg eller ekstra sæsondata hentet. Referencefeltet C er dokumenteret som
+  closing; ingen ny oddsmodel eller integration blev implementeret.
+- Reproduktion: 22 eksisterende ZIP-medlemmer, 7.647 rækker, én ugyldig målpost
+  i F2.csv. Aktive ID-/tids-/dubletkontroller og detaljer er i
+  [den faktiske rapport](reports/data_quality_2026-10-24.md).
+- Egne GitHub-diffs, regressionssuite, fire AppTest-flows, grøn CI #59 og eksport
+  fra adgangsbeskyttet live-app er den konkrete evidens for rettelserne.
+- De tidligere loggede forumspor gav risikospørgsmål om leakage og overfitting,
+  ikke belæg for nye databasetal. Ingen nye insiderpåstande blev brugt. En separat
+  udviklerforum-/issueundersøgelse blev ikke nødvendig for denne reproducerede
+  lokale importfejl; det er ikke en påstand om en fuld litteraturgennemgang.

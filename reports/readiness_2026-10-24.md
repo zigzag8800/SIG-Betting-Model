@@ -67,3 +67,12 @@ men var ikke med i `3fbf76a`. Principopdateringen publicerer ikke denne kode skj
 
 Ingen ny model, xG-/tidlig-oddsfunktion, betaling, sletning eller ny leverandørhentning
 indgår i denne arbejdsblok. Større modelresearch kommer efter datakvalitetsarbejdet.
+
+## Opfølgning efter den afgrænsede arbejdsblok
+
+ZIP-inventaret og den lokale importrettelse er nu færdiggjort. Det lokale
+Streamlit-testmiljø er oprettet; AppTest køres også i CI. Seneste kodecommit er
+`4469117`, grøn CI #59 med 82 tests. Tidligere restpunkter om ukontrollerede
+ZIP-medlemmer og upubliceret importkode er dermed afløst af
+[den faktiske dæknings- og rettelsesrapport](data_quality_2026-10-24.md).
+Begrænsninger om known_at, ekstra turneringer og uafhængig modelvalidering består.

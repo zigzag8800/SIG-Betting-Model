@@ -1,6 +1,7 @@
 # SIG Betting Model – Chrome på iPhone
 
 Projektets fælles arbejdsregler findes i [PRINCIPLES.md](PRINCIPLES.md).
+Se [den faktiske datadækning og rettelser](reports/data_quality_2026-10-24.md).
 Se også [researchloggen](RESEARCH_LOG.md) og [seneste vurdering af forudsætninger](reports/readiness_2026-10-24.md).
 
 Denne pakke indeholder en mobilvenlig Streamlit-webapp og den eksisterende beregningsmotor (`sig_model.py`). Den kørende app findes på https://sig-betting-model.streamlit.app/ . Der kræves ikke installation på iPhone, men appen skal hostes på en server.
