@@ -28,6 +28,28 @@ def coverage_report(history,fixtures,schedule=None,players=None,appearances=None
                        'Historiske klubtilhørsforhold':len(memberships)})
     return report
 
+def coverage_risks(history,fixtures):
+    """A diagnostic, not a claim of coverage from a source provider."""
+    result=[]
+    for league in sorted(TOP_FIVE):
+        rows=[r for r in history if r.get('league')==league]
+        match_ids=[str(r['match_id']) for r in rows if r.get('match_id')]
+        bad_score=0
+        for r in rows:
+            try:
+                h,a=int(r['home_goals']),int(r['away_goals'])
+                if h<0 or a<0:bad_score+=1
+            except (ValueError,KeyError,TypeError):
+                bad_score+=1
+        result.append({'Liga':league,'Resultater':len(rows),
+                       'Ugyldige målresultater':bad_score,
+                       'Dublerede kamp-ID':len(match_ids)-len(set(match_ids)),
+                       'Mangler kamp-ID':len(rows)-len(match_ids),
+                       'Mangler kickoff UTC':sum(not r.get('kickoff_utc') for r in rows),
+                       'Mangler datakilde':sum(not r.get('source') for r in rows),
+                       'Mangler tilgængelighedstid':sum(not r.get('known_at') for r in rows)})
+    return result
+
 def validate_identity_data(players,memberships,appearances):
     """Require stable IDs; reject overlapping historical club memberships."""
     pids=[x['player_id'] for x in players]
