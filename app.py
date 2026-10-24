@@ -21,7 +21,7 @@ from model_lab import compare_variants
 from league_lab import test_pooling, audit_pooling, parameter_search_report
 from compare_40 import compare_sig_e_40, summarize_pairs, validate_pairs
 from schedule_features_40 import schedule_features, TOP_FIVE
-from data_quality_40 import coverage_report, coverage_risks, validate_identity_data, player_load
+from data_quality_40 import coverage_report, coverage_risks, validate_identity_data, player_load, club_player_load_summary
 from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
 from benchmark_diagnostics import diagnostic_tables
 from historical_coverage import audit_uploaded_files
@@ -760,6 +760,18 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
             st.success(f'Data kontrolleret og klargjort til arkiv: {len(players40)} spillere, {len(members40)} klubperioder og {len(appearances40)} spillerkampe.')
         except (ValueError,KeyError,TypeError) as exc:
             st.error(f'Spillerdata afvist: {exc}')
+
+    if st.session_state.get('research_appearances_40') and st.session_state.get('research_memberships_40'):
+        known_clubs=sorted({m.get('club_id') for m in st.session_state['research_memberships_40'] if m.get('club_id')})
+        if known_clubs:
+            chosen_club40=st.selectbox('Klub-ID til belastningskontrol',known_clubs,key='sig40_load_club')
+            load_rows40=club_player_load_summary(st.session_state.get('research_players_40',[]),
+                st.session_state['research_memberships_40'],
+                st.session_state['research_appearances_40'],
+                chosen_club40,dt.date.today().isoformat())
+            st.markdown('**Klub- og landskampsbelastning pr. spiller (14 dage)**')
+            st.dataframe(pd.DataFrame(load_rows40),hide_index=True,use_container_width=True)
+            st.caption('Kun verificerede historiske klub-ID-tilknytninger. Manglende indlæste spillerkampe betyder ikke, at spilleren har været uden belastning. Resultatet anvendes ikke i prognoser.')
 
     st.markdown('**Fjern Championship fra aktive data**')
     if st.button('Ryd Championship fra aktivt arkiv',key='purge_championship_workspace'):
