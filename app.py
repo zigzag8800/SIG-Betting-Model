@@ -157,7 +157,7 @@ def api_matches(token, league, season):
         with urllib.request.urlopen(req,timeout=25) as response:
             matches=json.load(response)['matches']
         if STORE:
-            STORE.put('api_matches',cache_key,matches)
+            STORE.put_api_matches(cache_key,matches)
             STORE.finish(reservation,'success')
         return matches
     except urllib.error.HTTPError as e:
