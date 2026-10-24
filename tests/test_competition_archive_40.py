@@ -100,3 +100,10 @@ class CompetitionArchiveTests(unittest.TestCase):
         self.assertEqual(cl['known_at_available'],0)
 
 if __name__=='__main__':unittest.main()
+
+class InvalidResearchScores(unittest.TestCase):
+    def test_fractional_boolean_and_negative_scores_not_truncated(self):
+        from competition_archive_40 import convert_research_matches
+        for bad in (True,-1,1.5,'NaN'):
+            match=dict(id=1,utcDate='2026-01-01T12:00:00Z',homeTeam=dict(id=1,name='H'),awayTeam=dict(id=2,name='A'),status='FINISHED',score=dict(fullTime=dict(home=bad,away=0)))
+            self.assertEqual(convert_research_matches([match],'CL'),[])

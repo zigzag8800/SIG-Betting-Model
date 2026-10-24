@@ -9,13 +9,14 @@ import urllib
 import urllib.error
 import urllib.request
 from persistent_store import content_key, StorageError
+from archive_audit import valid_score
 
 
 def functions():
     tree=ast.parse(Path('app.py').read_text())
     wanted={'api_matches','convert','restore_types','ApiError'}
     module=ast.Module(body=[x for x in tree.body if isinstance(x,(ast.FunctionDef,ast.ClassDef)) and x.name in wanted],type_ignores=[])
-    ns=dict(hashlib=hashlib,json=json,urllib=urllib,STORE=None)
+    ns=dict(hashlib=hashlib,json=json,urllib=urllib,STORE=None,valid_score=valid_score)
     exec(compile(module,'app.py','exec'),ns)
     return ns
 
@@ -66,6 +67,11 @@ class ArchiveTests(unittest.TestCase):
         with patch('urllib.request.urlopen') as request:
             with self.assertRaises(ns['ApiError']): ns['api_matches']('   ','PL',2026)
             request.assert_not_called(); ns['STORE'].reserve.assert_not_called()
+
+    def test_convert_rejects_invalid_final_scores(self):
+        for bad in (True,-1,1.5,'NaN',None):
+            history,fixtures=functions()['convert']([dict(utcDate='2026-10-20T12:00:00Z',homeTeam=dict(name='H'),awayTeam=dict(name='A'),status='FINISHED',score=dict(fullTime=dict(home=bad,away=0)))],'PL',2026)
+            self.assertEqual(history,[]);self.assertEqual(fixtures,[])
 
     def test_convert_preserves_model_input(self):
         ns=functions()

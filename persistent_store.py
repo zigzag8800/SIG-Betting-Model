@@ -57,8 +57,9 @@ class Store:
             versions=[dict(zip(('saved_at','history','fixtures','research'),r)) for r in conn.execute(
                 "SELECT saved_at,jsonb_array_length(COALESCE(payload->'history','[]'::jsonb)),jsonb_array_length(COALESCE(payload->'fixtures','[]'::jsonb)),jsonb_array_length(COALESCE(payload->'research_competitions_40','[]'::jsonb)) FROM sig_archive WHERE kind='workspace_version' ORDER BY saved_at").fetchall()]
             files=conn.execute("SELECT key,payload FROM sig_archive WHERE kind='source_csv' ORDER BY key").fetchall()
+            bundles=conn.execute("SELECT key,payload FROM sig_archive WHERE kind='provider_bundle' ORDER BY key").fetchall()
             old_workspaces=conn.execute("SELECT key,jsonb_build_object('history',COALESCE(payload->'history','[]'::jsonb),'fixtures',COALESCE(payload->'fixtures','[]'::jsonb),'research_competitions_40',COALESCE(payload->'research_competitions_40','[]'::jsonb)) FROM sig_archive WHERE kind='workspace_version' ORDER BY key").fetchall()
-        return dict(inventory=inventory,current=current[0] if current else None,api=api,versions=versions,files=files,old_workspaces=old_workspaces)
+        return dict(inventory=inventory,current=current[0] if current else None,api=api,versions=versions,files=files,old_workspaces=old_workspaces,bundles=bundles)
 
     def reserve(self, provider, resource, minimum_seconds=7, weekly_limit=None):
         """Commit reservation BEFORE network IO. Crashes still consume quota.

@@ -4,6 +4,8 @@ Uses verified football-data.org identifiers, never fuzzy team-name matching.
 Does not download provider data or change production forecasts.
 """
 
+from archive_audit import valid_score
+
 RESEARCH_COMPETITIONS=frozenset(('CL','EL','UCL','EC','WC','QUFA','FAC','FLC','DFB','CDR'))
 
 def convert_research_matches(matches, competition):
@@ -28,6 +30,7 @@ def convert_research_matches(matches, competition):
         if finished and (home_goals is None or away_goals is None):
             continue
         if finished:
+            if not valid_score(dict(home_goals=home_goals,away_goals=away_goals)):continue
             try:
                 home_goals=int(home_goals);away_goals=int(away_goals)
                 if home_goals<0 or away_goals<0:continue

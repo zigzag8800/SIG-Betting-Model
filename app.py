@@ -12,7 +12,7 @@ import json
 import hashlib
 import hmac
 from persistent_store import Store, StorageError, content_key, verify_store
-from archive_audit import build_report, enrich_from_cache, merge_metadata
+from archive_audit import build_report, enrich_from_cache, merge_metadata, valid_score
 from closing_source import fetch_closing_archive
 
 import pandas as pd
@@ -214,7 +214,7 @@ class ApiError(Exception):
         self.authentication_failed=status==401 or (status==400 and 'token is invalid' in message.lower())
 
 
-def convert(matches, league):
+def convert(matches, league, season=None):
     history=[]; fixtures=[]
     for m in matches:
         home=m.get('homeTeam') or {}; away=m.get('awayTeam') or {}
@@ -228,10 +228,10 @@ def convert(matches, league):
               'away_team_id':str(away['id']) if away.get('id') is not None else '',
               'kickoff_utc':m.get('utcDate') or '',
               'source':'football-data.org',
-              'season':str((m.get('season') or {}).get('startDate') or '')[:4],
+              'season':str((m.get('season') or {}).get('startDate') or season or '')[:4],
               'status':m.get('status') or ''}
         score=(m.get('score') or {}).get('fullTime') or {}
-        if m.get('status')=='FINISHED' and score.get('home') is not None and score.get('away') is not None:
+        if m.get('status')=='FINISHED' and valid_score({'home_goals':score.get('home'),'away_goals':score.get('away')}):
             history.append({**base,'home_goals':score['home'],'away_goals':score['away']})
         elif m.get('status') in ('SCHEDULED','TIMED'):
             fixtures.append(base)
@@ -258,7 +258,7 @@ with st.expander('1 · Datakilde',expanded=True):
                 st.error('Angiv API-nøgle, mindst én liga og en sæson.')
             else:
                 hist=[]; fixtures=[]; errors=[]; successful=[]; denied=[]; rate_limited=False
-                loaded=st.session_state.setdefault('loaded_combos', {})
+                loaded=dict(st.session_state.get('loaded_combos', {}))
                 jobs=[(name, season) for name in chosen for season in sorted(seasons) if f'{LEAGUES[name]}:{season}' not in loaded or STORE]
                 skipped=len(chosen)*len(seasons)-len(jobs)
                 # Pace requests below the common 10 requests/minute free-tier limit.
@@ -272,7 +272,7 @@ with st.expander('1 · Datakilde',expanded=True):
                             progress.progress((index-1)/len(jobs), text=f'Henter {index} af {len(jobs)}: {name} {season}')
                         try:
                             matches=(api_matches if STORE else session_api_matches)(token,LEAGUES[name],season)
-                            h,f=convert(matches,LEAGUES[name]); hist+=h; fixtures+=f
+                            h,f=convert(matches,LEAGUES[name],season); hist+=h; fixtures+=f
                             successful.append(f'{name} {season}: {len(h)} afsluttede, {len(f)} kommende')
                             loaded[f'{LEAGUES[name]}:{season}']={'name':name,'season':season,'history':len(h),'fixtures':len(f)}
                         except ApiError as e:
@@ -296,12 +296,17 @@ with st.expander('1 · Datakilde',expanded=True):
                     # Preserve data from prior fetches when a later batch is partial.
                     old_h=st.session_state.get('history',[])
                     old_f=st.session_state.get('fixtures',[])
-                    hist=merge_metadata(old_h,hist)
-                    fixtures=merge_metadata(old_f,fixtures)
-                    st.session_state['history']=hist
-                    finished={(r['date'],r['league'],r['home'],r['away']) for r in hist}
-                    st.session_state['fixtures']=[r for r in fixtures if (r['date'],r['league'],r['home'],r['away']) not in finished]
-                    st.session_state['source_label']='football-data.org'
+                    try:
+                        merged_hist=merge_metadata(old_h,hist)
+                        merged_fixtures=merge_metadata(old_f,fixtures)
+                    except ValueError as exc:
+                        errors.append('Importkonflikt; eksisterende kamplister bevaret: '+str(exc))
+                    else:
+                        st.session_state['history']=merged_hist
+                        finished={(r['date'],r['league'],r['home'],r['away']) for r in merged_hist}
+                        st.session_state['fixtures']=[r for r in merged_fixtures if (r['date'],r['league'],r['home'],r['away']) not in finished]
+                        st.session_state['loaded_combos']=loaded
+                        st.session_state['source_label']='football-data.org'
                 st.session_state['api_fetch_report']={'successful':successful,'denied':denied,'errors':errors,'skipped':skipped}
                 if not jobs:
                     st.info('Alle valgte ligaer/sæsoner er allerede indlæst i denne session.')
@@ -782,6 +787,12 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
         st.caption(audit40['scope'])
         st.dataframe(pd.DataFrame(audit40['inventory']),hide_index=True)
         st.dataframe(pd.DataFrame(audit40['coverage']),hide_index=True)
+        for bundle40 in audit40.get('provider_bundles',[]):
+            st.write('Gemt ZIP: '+str(bundle40['name'])+' · medlemmer: '+str(len(bundle40['members']))+' · alle kontrolleret: '+str(bundle40['complete']))
+            st.dataframe(pd.DataFrame([{'Fil':m['name'],'Bytes':m.get('bytes'),
+                'Resultatrækker':sum(c['valid_results'] for c in m.get('coverage',[])),
+                'Kontrolfejl':m.get('error') or m.get('skipped') or ''} for m in bundle40['members']]),hide_index=True)
+
         st.download_button('Download PostgreSQL-undersøgelse (JSON)',json.dumps(audit40,default=str,ensure_ascii=False,indent=2).encode(),
                            'sig_postgres_audit.json','application/json',key='postgres_audit_download')
         st.download_button('Download PostgreSQL-dækning (CSV)',pd.DataFrame(audit40['coverage']).to_csv(index=False).encode('utf-8-sig'),

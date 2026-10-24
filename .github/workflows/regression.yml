@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install application and test dependencies
+        run: python -m pip install -r requirements.txt
       - name: Compile Python source
         run: python -m compileall -q -f .
       - name: Run regression suite and save log
