@@ -74,6 +74,25 @@ class Store:
             return None
         return row[0]
 
+    def api_version_status(self):
+        """Read-only cache/version counts; never expose token-scoped cache keys."""
+        with self.connect() as conn:
+            conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+            counts=conn.execute("""SELECT kind,count(*) FROM sig_archive
+                WHERE kind IN ('api_matches','api_matches_version')
+                GROUP BY kind""").fetchall()
+            # Version records can lag existing caches until their next refresh.
+            unversioned=conn.execute("""SELECT count(*) FROM sig_archive c
+                WHERE c.kind='api_matches' AND NOT EXISTS (
+                    SELECT 1 FROM sig_archive v
+                    WHERE v.kind='api_matches_version'
+                      AND v.payload->>'cache_key'=c.key
+                      AND v.payload->'matches'=c.payload)""").fetchone()[0]
+        by_kind=dict(counts)
+        return {'active_cache_entries':by_kind.get('api_matches',0),
+                'immutable_versions':by_kind.get('api_matches_version',0),
+                'cache_entries_without_matching_snapshot':unversioned}
+
     def audit_snapshot(self):
         """Inspect all record kinds without modifying data or provider ledgers."""
         with self.connect() as conn:
