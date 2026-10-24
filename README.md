@@ -1,6 +1,9 @@
 # SIG Betting Model – Chrome på iPhone
 
-Denne pakke indeholder en mobilvenlig Streamlit-webapp og den eksisterende beregningsmotor (`sig_model.py`). **Den er ikke deployet endnu.** Der kræves ikke installation på iPhone, men appen skal hostes på en server.
+Projektets fælles arbejdsregler findes i [PRINCIPLES.md](PRINCIPLES.md).
+Se også [researchloggen](RESEARCH_LOG.md) og [seneste vurdering af forudsætninger](reports/readiness_2026-10-24.md).
+
+Denne pakke indeholder en mobilvenlig Streamlit-webapp og den eksisterende beregningsmotor (`sig_model.py`). Den kørende app findes på https://sig-betting-model.streamlit.app/ . Der kræves ikke installation på iPhone, men appen skal hostes på en server.
 
 ## Gratis opsætning via Streamlit Community Cloud
 
@@ -21,7 +24,7 @@ Denne pakke indeholder en mobilvenlig Streamlit-webapp og den eksisterende bereg
 - `sig_model.py` er en eksperimentel Elo/målmodel med Dixon-Coles-korrektion. Minimumsodds bruger en **heuristisk** usikkerhedsmargin, ikke validerede konfidensintervaller. Profitabilitet er ikke dokumenteret.
 - API-kald kan blive begrænset på gratisplanen; begynd med én liga.
 - Gratis hosting kan sove eller have ressourcebegrænsninger.
-- Tilføj adgangskontrol, før appen bruges til private data eller deling med andre.
+- Det permanente PostgreSQL-arkiv kræver adgangskontrol via `SIG_OWNER_PASSWORD`; gem adgangsoplysninger i Streamlit Secrets.
 
 ## Lokalt test (valgfrit, ikke på iPhone)
 
