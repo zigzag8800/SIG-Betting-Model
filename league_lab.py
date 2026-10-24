@@ -11,6 +11,7 @@ from sig_model import date
 
 LEAGUES=('PL','ELC','PD','SA','BL1','FL1')
 BASE=.12
+DEFAULT_HOME_ADV=.16
 GRID=(.08,.12,.16,.20,.24)
 SHRINK_GAMES=300
 
@@ -19,10 +20,12 @@ class LeagueEngine(ExperimentalEngine):
         super().__init__(form_strength=.16,form_window=10)
         self.effects=effects
     def expected_goals(self,league,home,away,today):
-        original=self.elo_effect
-        self.elo_effect=self.effects.get(league,BASE)
+        old_elo,old_home=self.elo_effect,self.home_adv
+        setting=self.effects.get(league,{'elo':BASE,'home_adv':DEFAULT_HOME_ADV})
+        self.elo_effect,self.home_adv=setting['elo'],setting['home_adv']
         try: return super().expected_goals(league,home,away,today)
-        finally: self.elo_effect=original
+        finally:
+            self.elo_effect,self.home_adv=old_elo,old_home
 
 def _scores(rows,effect):
     engine=ExperimentalEngine(form_strength=.16,form_window=10,elo_effect=effect)
@@ -43,17 +46,31 @@ def fit_effects(train):
     global_loss={effect:sum(sum(v) for v in grid_scores[effect].values())/
                          max(1,sum(len(v) for v in grid_scores[effect].values())) for effect in GRID}
     common=min(GRID,key=lambda x:global_loss[x])
-    separate={};mixed={}
+    goals=defaultdict(lambda:[0,0,0])
+    for r in train:
+        hg,ag=int(r['home_goals']),int(r['away_goals'])
+        if hg<0 or ag<0: continue
+        v=goals[r['league']]
+        v[0]+=hg
+        v[1]+=ag
+        v[2]+=1
+    sum_h=sum(v[0] for v in goals.values())
+    sum_a=sum(v[1] for v in goals.values())
+    home_all=max(-.3,min(.6,math.log((sum_h+1)/(sum_a+1))))
+    params={'Fælles':{},'Ligaspecifik':{},'Kombineret':{}}
     for lg in LEAGUES:
-        counts={e:len(grid_scores[e].get(lg,[])) for e in GRID}
-        if not counts[common]:
-            separate[lg]=common;mixed[lg]=common;continue
-        best=min(GRID,key=lambda e:sum(grid_scores[e][lg])/len(grid_scores[e][lg]))
-        separate[lg]=best
-        # Conservative shrinkage towards the globally selected coefficient.
-        alpha=counts[common]/(counts[common]+SHRINK_GAMES)
-        mixed[lg]=common+alpha*(best-common)
-    return {'Fælles':{lg:common for lg in LEAGUES},'Ligaspecifik':separate,'Kombineret':mixed}
+        scores={e:grid_scores[e].get(lg,[]) for e in GRID}
+        best=min(GRID,key=lambda e:sum(scores[e])/len(scores[e])) if scores[common] else common
+        n=len(scores[common])
+        h,a,m=goals[lg]
+        home_raw=max(-.3,min(.6,math.log((h+1)/(a+1)))) if m else home_all
+        home_separate=home_all+m/(m+200)*(home_raw-home_all)
+        home_mixed=home_all+m/(m+500)*(home_raw-home_all)
+        elo_mixed=common+n/(n+300)*(best-common)
+        params['Fælles'][lg]={'elo':common,'home_adv':home_all}
+        params['Ligaspecifik'][lg]={'elo':best,'home_adv':home_separate}
+        params['Kombineret'][lg]={'elo':elo_mixed,'home_adv':home_mixed}
+    return params
 
 def test_pooling(rows,train_end,test_end):
     """Fit on dates strictly earlier than train_end, then predict later dates."""
@@ -97,7 +114,7 @@ def parameter_search_report(train):
 def audit_pooling(records, parameters, tolerance=1e-12):
     """Explicitly report whether fitted models differ in parameters and predictions."""
     variants=tuple(parameters)
-    param_distinct=len({tuple(round(parameters[name][lg],12) for lg in LEAGUES)
+    param_distinct=len({tuple((round(parameters[name][lg]['elo'],12),round(parameters[name][lg]['home_adv'],12)) for lg in LEAGUES)
                         for name in variants})
     grouped=defaultdict(dict)
     for r in records:
