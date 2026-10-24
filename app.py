@@ -21,7 +21,7 @@ from model_lab import compare_variants
 from league_lab import test_pooling, audit_pooling, parameter_search_report
 from compare_40 import compare_sig_e_40, summarize_pairs, validate_pairs
 from schedule_features_40 import schedule_features, TOP_FIVE
-from data_quality_40 import coverage_report, validate_identity_data, player_load
+from data_quality_40 import coverage_report, coverage_risks, validate_identity_data, player_load
 from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
 from benchmark_diagnostics import diagnostic_tables
 from historical_coverage import audit_uploaded_files
@@ -736,6 +736,9 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
                                  st.session_state.get('research_memberships_40',[]))
     st.dataframe(pd.DataFrame(audit_rows40),hide_index=True,use_container_width=True)
     st.caption('Tallene viser dækning i det aktive arkiv. Manglende historiske kamp-ID og kickoff kan ikke udledes sikkert fra holdnavne og dato alene.')
+    st.markdown('**SIG 4.0 – datarisici og sporbarhed**')
+    st.dataframe(pd.DataFrame(coverage_risks(st.session_state.get('history',[]),st.session_state.get('fixtures',[]))),hide_index=True,use_container_width=True)
+    st.caption('Mangler datakilde eller tilgængelighedstid betyder, at en historisk backtest ikke kan dokumenteres som fuldt point-in-time korrekt.')
     st.markdown('**Spillere, historiske klubtilhørsforhold og landsholdsminutter**')
     st.caption('Tre CSV-filer: spillerregister (player_id), klubhistorik (player_id, club_id, from_date, to_date) og spillerkampe (player_id, match_id, date, known_at, competition_type, minutes). ID-koblinger skal være verificerede. Import giver ingen automatisk påvirkning af prognoser.')
     players_upload=st.file_uploader('Upload spillerregister (CSV)',type=['csv'],key='sig40_players_upload')
