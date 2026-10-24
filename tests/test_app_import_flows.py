@@ -124,3 +124,32 @@ class AppImportFlows(unittest.TestCase):
             self.assertEqual(at.session_state['history'][0]['home_goals'],2)
             self.assertTrue(any('concurrent update' in e.value for e in at.error))
             network.assert_not_called()
+
+    def test_backtest_recompute_replays_previous_snapshot_and_saves_revision(self):
+        import copy
+        import datetime as dt
+        from unittest.mock import Mock
+        from persistent_store import content_key
+        from sig_model import Engine,load_history
+        history=[dict(date=f'2026-10-{day:02}',league='ELC',home='H',away='A',home_goals=1,away_goals=0) for day in range(1,16)]
+        asof=dt.date(2026,10,24)
+        previous=dict(history=copy.deepcopy(history),backtest_results=load_history(Engine(),history,cutoff=asof,backtest=True),backtest_signature=[len(history),'2026-10-24','test',0.0,[]],source_label='test')
+        state=copy.deepcopy(previous);state['history'][9]['home_goals']=0
+        state['backtest_signature']=['STALE_AFTER_DATA_CORRECTION','synthetic']
+        state['data_corrections']=[dict(match_id='synthetic',previous_workspace_hash=content_key(previous))]
+        store=Mock();store.get.side_effect=lambda kind,key:copy.deepcopy(state) if kind=='workspace' else copy.deepcopy(previous) if kind=='workspace_version' else None;store.log.return_value=[]
+        def save(updated,expected):
+            self.assertEqual(expected,content_key(state));state.clear();state.update(copy.deepcopy(updated));return content_key(state)
+        store.save_workspace.side_effect=save
+        at=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'));at.secrets['SIG_DATABASE_URL']='synthetic-dsn';at.secrets['SIG_OWNER_PASSWORD']='synthetic-owner';at.session_state['archive_password']='synthetic-owner'
+        with patch('persistent_store.Store',return_value=store),patch('urllib.request.urlopen') as network:
+            at.run(timeout=20)
+            next(x for x in at.date_input if x.label=='Analysedato').set_value(asof)
+            next(b for b in at.button if b.label=='Kør kronologisk backtest').click().run(timeout=20)
+            self.assertEqual(len(at.exception),0)
+            revision=state['backtest_revision']
+            self.assertTrue(revision['stored_reference_reproduced']);self.assertTrue(revision['same_settings_as_stored']);self.assertTrue(revision['identical_fixture_set'])
+            self.assertEqual(len(revision['changed_input_matches']),1)
+            self.assertEqual(state['backtest_signature'][0],content_key(state['history']))
+            self.assertEqual(previous['backtest_results'][4]['actual'],'1')
+            network.assert_not_called();store.reserve.assert_not_called()

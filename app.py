@@ -15,6 +15,7 @@ from persistent_store import Store, StorageError, content_key, verify_store
 from archive_audit import build_report, enrich_from_cache, merge_metadata, valid_score
 from closing_source import fetch_closing_archive
 from regular_time_correction import commit_correction, provider_final_fields
+from backtest_revision import recompute as recompute_backtest
 
 import pandas as pd
 import streamlit as st
@@ -60,7 +61,7 @@ else:
 
 PERSIST_KEYS=('history','fixtures','odds','loaded_combos','source_label','api_fetch_report',
               'historical_bookmaker_files','backtest_results','backtest_signature',
-              'lab_rows','lab_signature','benchmark_result','benchmark_signature','imported_backtests','cross_comp_schedule_40','research_players_40','research_memberships_40','research_appearances_40','research_competitions_40','data_corrections')
+              'lab_rows','lab_signature','benchmark_result','benchmark_signature','imported_backtests','cross_comp_schedule_40','research_players_40','research_memberships_40','research_appearances_40','research_competitions_40','data_corrections','backtest_revision')
 
 def restore_types(value):
     # JSON stores tuples as lists; signatures must preserve their comparison type.
@@ -81,7 +82,11 @@ if STORE and not st.session_state.get('_archive_restored'):
 
 if st.session_state.get('data_corrections'):
     latest_correction=st.session_state['data_corrections'][-1]
-    st.info('Datakorrektion gemt: kamp '+latest_correction['match_id']+' anvender 90-minuttersresultatet. Originalscore og korrektion er bevaret; tidligere API-baserede tests skal genberegnes.')
+    revision_notice=st.session_state.get('backtest_revision') or {}
+    if revision_notice.get('new_history_hash')==content_key(st.session_state.get('history',[])) and (st.session_state.get('backtest_signature') or [None])[0]==revision_notice.get('new_history_hash'):
+        st.info('Datakorrektion gemt. Den historiske test er genberegnet på de rettede data; originalscore og tidligere testversioner er bevaret.')
+    else:
+        st.info('Datakorrektion gemt: kamp '+latest_correction['match_id']+' anvender 90-minuttersresultatet. Originalscore og korrektion er bevaret; tidligere API-baserede tests skal genberegnes.')
 
 def archive_uploads(files):
     if not STORE or not files:
@@ -490,9 +495,14 @@ if hist:
         st.caption('Lavere score er bedre. Sammenligningen er mod en simpel historisk liga-baseline, ikke mod bookmakerodds.')
         if st.button('Kør kronologisk backtest', key='run_backtest'):
             with st.spinner('Tester afsluttede kampe i datoorden…'):
-                test_engine=Engine(form_strength=form_strength,manager_changes=manager_changes)
-                back=load_history(test_engine,hist,cutoff=asof,backtest=True)
+                previous_test_snapshot=None
+                if STORE and st.session_state.get('data_corrections'):
+                    previous_test_snapshot=STORE.get('workspace_version',st.session_state['data_corrections'][-1]['previous_workspace_hash'])
+                    if previous_test_snapshot is None:raise ValueError('Tidligere arkivversion mangler; sammenligning kunne ikke verificeres.')
+                back,revision=recompute_backtest(hist,asof,form_strength,manager_changes,st.session_state.get('source_label',''),previous_test_snapshot)
                 st.session_state['backtest_results']=back
+                if revision is not None:st.session_state['backtest_revision']=revision
+                else:st.session_state.pop('backtest_revision',None)
                 saved,message=save_backtest_to_github(back,asof.isoformat(),form_strength)
                 st.session_state['backtest_save_message']=(saved,message)
                 st.session_state['backtest_signature']=(content_key(hist),asof.isoformat(),st.session_state.get('source_label',''),form_strength,tuple((r['league'],r['team'],r['start_date']) for r in manager_changes))
@@ -548,6 +558,14 @@ if hist:
             cal['observeret']=(cal['observeret']*100).round(1)
             cal=cal.rename(columns={'interval':'Sandsynlighed','kampe':'Kampe','forudsagt':'Forudsagt %','observeret':'Faktisk %'})
             st.dataframe(cal,hide_index=True,use_container_width=True)
+            revision=st.session_state.get('backtest_revision')
+            if revision and revision.get('new_history_hash')==content_key(hist) and revision.get('settings')==dict(asof=asof.isoformat(),source_label=st.session_state.get('source_label',''),form_strength=form_strength,manager_changes=[[r['league'],r['team'],r['start_date']] for r in manager_changes]):
+                st.markdown('**Genberegning efter datakorrektion**')
+                st.caption('Før og efter er genberegnet med samme modelindstillinger. Dette er en korrigeret intern test, ikke ny uafhængig validering.')
+                st.dataframe(pd.DataFrame([{'Version':'Før rettelse',**revision['before']},{'Version':'Efter rettelse',**revision['after']}]),hide_index=True)
+                st.write({'Samme kampe':revision['identical_fixture_set'],'Samme indstillinger som tidligere':revision['same_settings_as_stored'],'Tidligere test reproduceret':revision['stored_reference_reproduced'],'Ændrede inputkampe':len(revision['changed_input_matches'])})
+                st.download_button('Download genberegningsrapport (JSON)',json.dumps(revision,ensure_ascii=False,indent=2).encode(),
+                                   'sig_backtest_revision.json','application/json',key='download_backtest_revision')
             st.download_button('Download historisk test (CSV)',to_csv(back,list(back[0])),'sig_backtest.csv','text/csv',key='download_backtest')
             st.warning('Vigtigt: Dette er intern historisk test på det samme datamiljø, som bruges til udvikling. Det er ikke en uafhængig fremadrettet validering eller dokumentation for profitable spil.')
         else:
