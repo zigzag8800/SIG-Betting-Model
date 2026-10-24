@@ -91,7 +91,8 @@ def test_pooling(rows,train_end,test_end):
                     probs=p['p']
                     brier=sum((probs[k]-(k==actual))**2 for k in ('1','X','2'))/3
                     records.append({'model':label,'league':r['league'],'date':ds,'brier':brier,
-                                    'logloss':-math.log(max(1e-12,probs[actual]))})
+                                    'logloss':-math.log(max(1e-12,probs[actual])),
+                                    'p1':probs['1'],'px':probs['X'],'p2':probs['2']})
         for r in matches:
             for engine in engines.values():
                 engine.update(r['league'],r['home'],r['away'],day,int(r['home_goals']),int(r['away_goals']))
