@@ -70,6 +70,13 @@ class ArchiveTests(unittest.TestCase):
     def test_convert_preserves_model_input(self):
         ns=functions()
         history,fixtures=ns['convert']([{'utcDate':'2026-10-20T12:00:00Z','homeTeam':{'name':'H'},'awayTeam':{'name':'A'},'status':'FINISHED','score':{'fullTime':{'home':2,'away':1}}}],'PL')
-        self.assertEqual(history,[{'date':'2026-10-20','league':'PL','home':'H','away':'A','home_goals':2,'away_goals':1}]);self.assertEqual(fixtures,[])
+        self.assertEqual(len(history),1)
+        expected={'date':'2026-10-20','league':'PL','home':'H','away':'A','home_goals':2,'away_goals':1}
+        for key,value in expected.items():
+            self.assertEqual(history[0][key],value)
+        self.assertEqual(history[0]['kickoff_utc'],'2026-10-20T12:00:00Z')
+        self.assertEqual(history[0]['source'],'football-data.org')
+        self.assertEqual(history[0]['match_id'],'')
+        self.assertEqual(fixtures,[])
 
 if __name__=='__main__': unittest.main()
