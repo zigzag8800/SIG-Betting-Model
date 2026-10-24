@@ -35,4 +35,20 @@ class DataQualityTests(unittest.TestCase):
            {'player_id':'p1','club_id':'B','from_date':'2026-07-01','to_date':''}]
         with self.assertRaises(ValueError):
             validate_identity_data(p,m,[])
+    def test_duplicate_player_match_rejected(self):
+        p=[{'player_id':'p1'}]
+        m=[{'player_id':'p1','club_id':'A','from_date':'2026-01-01','to_date':''}]
+        a={'player_id':'p1','match_id':'m1','date':'2026-10-20','known_at':'2026-10-21',
+           'competition_type':'international','minutes':90}
+        with self.assertRaises(ValueError):
+            validate_identity_data(p,m,[a,dict(a)])
+
+    def test_minutes_known_before_match_rejected(self):
+        p=[{'player_id':'p1'}]
+        m=[{'player_id':'p1','club_id':'A','from_date':'2026-01-01','to_date':''}]
+        a=[{'player_id':'p1','match_id':'m1','date':'2026-10-20','known_at':'2026-10-19',
+            'competition_type':'international','minutes':90}]
+        with self.assertRaises(ValueError):
+            validate_identity_data(p,m,a)
+
 if __name__=='__main__':unittest.main()
