@@ -83,11 +83,19 @@ class CompetitionArchiveTests(unittest.TestCase):
         self.assertEqual(merged[0]['status'],'FINISHED')
         self.assertEqual(merged[0]['home_goals'],2)
 
+    def test_finished_without_score_not_counted_as_valid_result(self):
+        row=convert_research_matches([self.fixture()],'CL')[0]
+        corrupt={**row,'home_goals':None}
+        coverage=next(x for x in research_coverage([corrupt]) if x['competition']=='CL')
+        self.assertEqual(coverage['finished'],1)
+        self.assertEqual(coverage['finished_with_score'],0)
+
     def test_coverage_is_diagnostic(self):
         rows=convert_research_matches([self.fixture()],'CL')
         cl=next(x for x in research_coverage(rows) if x['competition']=='CL')
         self.assertEqual(cl['matches'],1)
         self.assertEqual(cl['finished'],1)
+        self.assertEqual(cl['finished_with_score'],1)
         self.assertEqual(cl['stable_team_ids'],1)
         self.assertEqual(cl['known_at_available'],0)
 
