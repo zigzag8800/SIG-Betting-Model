@@ -42,6 +42,8 @@ class CompetitionArchiveTests(unittest.TestCase):
         rows=convert_research_matches([self.fixture()],'CL')
         cl=next(x for x in research_coverage(rows) if x['competition']=='CL')
         self.assertEqual(cl['matches'],1)
+        self.assertEqual(cl['finished'],1)
+        self.assertEqual(cl['stable_team_ids'],1)
         self.assertEqual(cl['known_at_available'],0)
 
 if __name__=='__main__':unittest.main()
