@@ -14,6 +14,13 @@ class CompetitionArchiveTests(unittest.TestCase):
         invalid={**self.fixture(),'awayTeam':{'name':'Unknown'}}
         self.assertEqual(convert_research_matches([invalid],'CL'),[])
 
+    def test_documented_european_codes(self):
+        for code in ('CL','EL','UCL','EC','WC','QUFA'):
+            with self.subTest(code=code):
+                self.assertEqual(convert_research_matches([self.fixture()],code)[0]['competition'],code)
+        with self.assertRaises(ValueError):
+            convert_research_matches([self.fixture()],'ECL')
+
     def test_reject_unknown_competition(self):
         with self.assertRaises(ValueError):
             convert_research_matches([self.fixture()],'PL')
