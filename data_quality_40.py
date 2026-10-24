@@ -3,6 +3,7 @@
 No name-based joins. Historical memberships must be dated and explicit.
 """
 import datetime as dt
+from archive_audit import valid_score
 from collections import Counter,defaultdict
 from schedule_features_40 import TOP_FIVE
 
@@ -18,10 +19,7 @@ def coverage_report(history,fixtures,schedule=None,players=None,appearances=None
         keys=[(x.get('date'),x.get('home'),x.get('away')) for x in subset]
         def valid_result(x):
             if not (x.get('date') and x.get('home') and x.get('away')):return False
-            try:
-                home=int(x['home_goals']);away=int(x['away_goals'])
-                return home>=0 and away>=0 and not isinstance(x['home_goals'],bool) and not isinstance(x['away_goals'],bool)
-            except (ValueError,TypeError,KeyError):return False
+            return valid_score(x)
         valid=sum(valid_result(x) for x in subset)
         report.append({'Liga':league,'Afsluttede kampe':len(subset),'Kommende kampe':len(future),
                        'Gyldige resultatrækker':valid,'Dublerede afsluttede kampe':len(keys)-len(set(keys)),
@@ -39,13 +37,7 @@ def coverage_risks(history,fixtures):
     for league in sorted(TOP_FIVE):
         rows=[r for r in history if r.get('league')==league]
         match_ids=[str(r['match_id']) for r in rows if r.get('match_id')]
-        bad_score=0
-        for r in rows:
-            try:
-                h,a=int(r['home_goals']),int(r['away_goals'])
-                if h<0 or a<0:bad_score+=1
-            except (ValueError,KeyError,TypeError):
-                bad_score+=1
+        bad_score=sum(not valid_score(r) for r in rows)
         result.append({'Liga':league,'Resultater':len(rows),
                        'Ugyldige målresultater':bad_score,
                        'Dublerede kamp-ID':len(match_ids)-len(set(match_ids)),

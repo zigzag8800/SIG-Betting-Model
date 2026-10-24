@@ -12,6 +12,7 @@ import json
 import hashlib
 import hmac
 from persistent_store import Store, StorageError, content_key, verify_store
+from archive_audit import build_report, enrich_from_cache, merge_metadata
 from closing_source import fetch_closing_archive
 
 import pandas as pd
@@ -226,7 +227,9 @@ def convert(matches, league):
               'home_team_id':str(home['id']) if home.get('id') is not None else '',
               'away_team_id':str(away['id']) if away.get('id') is not None else '',
               'kickoff_utc':m.get('utcDate') or '',
-              'source':'football-data.org'}
+              'source':'football-data.org',
+              'season':str((m.get('season') or {}).get('startDate') or '')[:4],
+              'status':m.get('status') or ''}
         score=(m.get('score') or {}).get('fullTime') or {}
         if m.get('status')=='FINISHED' and score.get('home') is not None and score.get('away') is not None:
             history.append({**base,'home_goals':score['home'],'away_goals':score['away']})
@@ -293,8 +296,8 @@ with st.expander('1 · Datakilde',expanded=True):
                     # Preserve data from prior fetches when a later batch is partial.
                     old_h=st.session_state.get('history',[])
                     old_f=st.session_state.get('fixtures',[])
-                    hist=list({(r['date'],r['league'],r['home'],r['away']):r for r in old_h+hist}.values())
-                    fixtures=list({(r['date'],r['league'],r['home'],r['away']):r for r in old_f+fixtures}.values())
+                    hist=merge_metadata(old_h,hist)
+                    fixtures=merge_metadata(old_f,fixtures)
                     st.session_state['history']=hist
                     finished={(r['date'],r['league'],r['home'],r['away']) for r in hist}
                     st.session_state['fixtures']=[r for r in fixtures if (r['date'],r['league'],r['home'],r['away']) not in finished]
@@ -339,8 +342,8 @@ with st.expander('1 · Datakilde',expanded=True):
     if st.button('Tilføj CSV-data'):
         try:
             eh=parse_upload(extra_h,HIST_FIELDS); ef=parse_upload(extra_f,FIX_FIELDS)
-            st.session_state['history']=list({(r['date'],r['league'],r['home'],r['away']):r for r in st.session_state.get('history',[])+eh}.values())
-            st.session_state['fixtures']=list({(r['date'],r['league'],r['home'],r['away']):r for r in st.session_state.get('fixtures',[])+ef}.values())
+            st.session_state['history']=merge_metadata(st.session_state.get('history',[]),eh)
+            st.session_state['fixtures']=merge_metadata(st.session_state.get('fixtures',[]),ef)
             st.success(f'Tilføjet {len(eh)} historiske og {len(ef)} kommende kampe (dubletter fjernet).')
         except Exception as e: st.error(str(e))
     with st.expander('CSV-skabeloner'):
@@ -765,6 +768,35 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
         file_name='sig_datadaekning_40.csv',mime='text/csv',
         key='sig40_coverage_export')
     st.caption('Rapporten læser kun den aktive sessions arkivdata og indeholder ingen API-nøgle eller spilleroplysninger.')
+    st.markdown('**PostgreSQL – faktisk arkivdækning**')
+    if STORE and st.button('Undersøg PostgreSQL uden downloads',key='audit_postgres'):
+        try:
+            audit40,cached40=build_report(STORE.audit_snapshot(),st.session_state)
+            st.session_state['_postgres_audit']=(audit40,cached40)
+        except Exception:
+            st.error('PostgreSQL-undersøgelsen fejlede; ingen data ændret.')
+    if st.session_state.get('_postgres_audit'):
+        audit40,cached40=st.session_state['_postgres_audit']
+        st.caption(audit40['scope'])
+        st.dataframe(pd.DataFrame(audit40['inventory']),hide_index=True)
+        st.dataframe(pd.DataFrame(audit40['coverage']),hide_index=True)
+        st.download_button('Download PostgreSQL-undersøgelse (JSON)',json.dumps(audit40,default=str,ensure_ascii=False,indent=2).encode(),
+                           'sig_postgres_audit.json','application/json',key='postgres_audit_download')
+        st.download_button('Download PostgreSQL-dækning (CSV)',pd.DataFrame(audit40['coverage']).to_csv(index=False).encode('utf-8-sig'),
+                           'sig_postgres_coverage.csv','text/csv',key='postgres_coverage_download')
+        if st.button('Genskab manglende metadata fra gemt API-cache',key='restore_cached_identity'):
+            try:
+                repaired_h,report_h=enrich_from_cache(st.session_state.get('history',[]),cached40)
+                repaired_f,report_f=enrich_from_cache(st.session_state.get('fixtures',[]),cached40)
+                updated={k:st.session_state[k] for k in PERSIST_KEYS if k in st.session_state}
+                updated.update(history=repaired_h,fixtures=repaired_f)
+                fingerprint=STORE.save_workspace(updated,st.session_state.get('_archive_fingerprint'))
+                st.session_state.update(history=repaired_h,fixtures=repaired_f,_archive_fingerprint=fingerprint)
+                st.success('Metadata gemt uden nye downloads. Historik: '+str(report_h)+'; kampprogram: '+str(report_f))
+                st.session_state.pop('_postgres_audit',None)
+            except Exception as exc:
+                st.error('Metadata blev ikke gemt: '+str(exc))
+
     st.markdown('**Importér forskningskampe fra ekstra turneringer**')
     st.caption('Bruger eksisterende API-cache og adgangsnøgle. Importér kun de valgte turneringer/sæsoner. Ingen effekt på produktionens prognoser.')
     research_codes40={'Champions League':'CL','Europa League':'EL','Conference League':'UCL',

@@ -3,6 +3,7 @@
 Only audits; never adds guessed IDs or past availability timestamps.
 """
 import datetime as dt
+from archive_audit import valid_score
 from collections import defaultdict
 
 TOP_FIVE=frozenset(('PL','PD','SA','BL1','FL1'))
@@ -26,10 +27,7 @@ def audit_match_identity(rows):
                 if parsed.tzinfo is None or parsed.utcoffset()!=dt.timedelta(0):raise ValueError('not UTC')
                 if parsed.date().isoformat()!=str(r.get('date') or '')[:10]:inconsistent_date+=1
             except (ValueError,TypeError,OverflowError):missing_kickoff+=1
-            try:
-                hg,ag=int(r['home_goals']),int(r['away_goals'])
-                if hg<0 or ag<0:invalid+=1
-            except (KeyError,TypeError,ValueError):invalid+=1
+            if not valid_score(r):invalid+=1
         # The same source match ID must not describe different teams, scores or dates.
         for same_id in ids.values():
             signatures={(str(x.get('date')),str(x.get('home_team_id') or x.get('home')),

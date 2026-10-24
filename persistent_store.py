@@ -46,6 +46,18 @@ class Store:
             return None
         return row[0]
 
+    def audit_snapshot(self):
+        """Inspect all record kinds without modifying data or provider ledgers."""
+        with self.connect() as conn:
+            conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+            inventory=[dict(zip(('kind','records','bytes'),r)) for r in conn.execute(
+                'SELECT kind,count(*),sum(pg_column_size(payload)) FROM sig_archive GROUP BY kind ORDER BY kind').fetchall()]
+            current=conn.execute("SELECT payload FROM sig_archive WHERE kind='workspace' AND key='current'").fetchone()
+            api=conn.execute("SELECT key,payload FROM sig_archive WHERE kind='api_matches' ORDER BY key").fetchall()
+            versions=[dict(zip(('saved_at','history','fixtures','research'),r)) for r in conn.execute(
+                "SELECT saved_at,jsonb_array_length(COALESCE(payload->'history','[]'::jsonb)),jsonb_array_length(COALESCE(payload->'fixtures','[]'::jsonb)),jsonb_array_length(COALESCE(payload->'research_competitions_40','[]'::jsonb)) FROM sig_archive WHERE kind='workspace_version' ORDER BY saved_at").fetchall()]
+        return dict(inventory=inventory,current=current[0] if current else None,api=api,versions=versions)
+
     def reserve(self, provider, resource, minimum_seconds=7, weekly_limit=None):
         """Commit reservation BEFORE network IO. Crashes still consume quota.
 
