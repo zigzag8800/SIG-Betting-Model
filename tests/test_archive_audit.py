@@ -36,3 +36,12 @@ class ArchiveAuditTests(unittest.TestCase):
         self.assertEqual(scopes['postgres:workspace/current']['missing_match_id'],1)
         self.assertEqual(scopes['postgres:api_cache']['missing_match_id'],0)
         self.assertEqual(scopes['postgres:workspace/current']['season'],'unknown')
+    def test_raw_source_and_versions_audited_separately(self):
+        import base64
+        raw=b'Div,Date,HomeTeam,AwayTeam,FTHG,FTAG\nE0,01/08/2025,H,A,1,0\n'
+        snap=dict(api=[],inventory=[],versions=[],current={},files=[('digest',dict(name='E0.csv',content=base64.b64encode(raw).decode()))],old_workspaces=[('v1',dict(history=[self.old]))])
+        report,_=build_report(snap,{})
+        self.assertEqual(report['raw_files'][0]['coverage'][0]['valid_results'],1)
+        self.assertEqual(report['raw_files'][0]['coverage'][0]['season'],'unknown')
+        self.assertEqual(report['historical_versions'][0]['coverage'][0]['rows'],1)
+        self.assertEqual(report['coverage'],[])

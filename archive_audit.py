@@ -1,5 +1,9 @@
 """Read-only coverage of persisted records. No HTTP, guessed IDs or timestamps."""
 import datetime as dt
+import base64
+import csv
+import io
+from pathlib import PurePosixPath
 from collections import defaultdict
 
 FIELDS=('match_id','home_team_id','away_team_id','kickoff_utc','source','season','status','known_at')
@@ -105,7 +109,27 @@ def build_report(snapshot,session):
     for label,data in [('session',session),('postgres:workspace/current',current)]:
         summary.extend(summarize(data.get('history',[])+data.get('fixtures',[]),label))
         summary.extend(summarize(data.get('research_competitions_40',[]),label+':research'))
-    return dict(generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
-        scope='All sig_archive records inventoried in one read-only repeatable-read transaction; current workspace and every API cache audited. Versions counted separately, not unioned as unique matches. Raw files are inventoried, not audited as normalized matches.',
+    raw_files=[]
+    mapping={'E0':'PL','E1':'ELC','SP1':'PD','I1':'SA','D1':'BL1','F1':'FL1'}
+    for digest,item in snapshot.get('files',[]):
+        raw=base64.b64decode(item['content']).decode('utf-8-sig')
+        source_rows=list(csv.DictReader(io.StringIO(raw)))
+        rows=[]
+        for r in source_rows:
+            try:date=dt.datetime.strptime(r.get('Date',''),'%d/%m/%Y').date().isoformat()
+            except ValueError:
+                try:date=dt.datetime.strptime(r.get('Date',''),'%d/%m/%y').date().isoformat()
+                except ValueError:date=''
+            rows.append(dict(league=mapping.get(r.get('Div') or PurePosixPath(item['name']).stem.upper(),'unknown'),date=date,
+                home=r.get('HomeTeam'),away=r.get('AwayTeam'),home_goals=r.get('FTHG'),away_goals=r.get('FTAG'),source='football-data.co.uk'))
+        raw_files.append(dict(name=item['name'],sha256=digest,coverage=summarize(rows,'postgres:source_csv')))
+    historical_versions=[]
+    for key,data in snapshot.get('old_workspaces',[]):
+        historical_versions.append(dict(version=key,coverage=summarize(data.get('history',[])+data.get('fixtures',[]),'postgres:workspace_version'),
+            research=summarize(data.get('research_competitions_40',[]),'postgres:workspace_version:research')))
+    excluded=[dict(competition=r['league'],season=r['season'],match_id=r['match_id'],status=r['status'],date=r['date'],home=r['home'],away=r['away'])
+              for r in cached if r.get('status') not in ('FINISHED','SCHEDULED','TIMED')]
+    return dict(raw_files=raw_files,historical_versions=historical_versions,cache_exclusions=excluded,generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+        scope='All sig_archive records inventoried in one read-only repeatable-read transaction; current workspace and every API cache audited. Every workspace version and archived source CSV audited separately; versions and sources must not be added as unique matches. The provider ZIP is inventoried but its unselected files are not expanded. Raw CSV seasons remain unknown unless explicit.',
         inventory=snapshot['inventory'],versions=snapshot['versions'],coverage=summary,
         empty_research_competitions=sorted(set(('CL','EL','UCL','EC','WC','QUFA','FAC','FLC','DFB','CDR'))-{r.get('competition') for r in current.get('research_competitions_40',[])})),cached

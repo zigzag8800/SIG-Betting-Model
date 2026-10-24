@@ -342,8 +342,10 @@ with st.expander('1 · Datakilde',expanded=True):
     if st.button('Tilføj CSV-data'):
         try:
             eh=parse_upload(extra_h,HIST_FIELDS); ef=parse_upload(extra_f,FIX_FIELDS)
-            st.session_state['history']=merge_metadata(st.session_state.get('history',[]),eh)
-            st.session_state['fixtures']=merge_metadata(st.session_state.get('fixtures',[]),ef)
+            merged_history=merge_metadata(st.session_state.get('history',[]),eh)
+            merged_fixtures=merge_metadata(st.session_state.get('fixtures',[]),ef)
+            st.session_state['history']=merged_history
+            st.session_state['fixtures']=merged_fixtures
             st.success(f'Tilføjet {len(eh)} historiske og {len(ef)} kommende kampe (dubletter fjernet).')
         except Exception as e: st.error(str(e))
     with st.expander('CSV-skabeloner'):
