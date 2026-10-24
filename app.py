@@ -23,7 +23,7 @@ from compare_40 import compare_sig_e_40, summarize_pairs, validate_pairs
 from schedule_features_40 import schedule_features, TOP_FIVE
 from data_quality_40 import coverage_report, coverage_risks, validate_identity_data, player_load, club_player_load_summary
 from match_identity_audit import audit_match_identity
-from competition_archive_40 import research_coverage
+from competition_archive_40 import research_coverage, convert_research_matches, merge_research_matches
 from bookmaker_lab import parse_historical_csv, compare_to_bookmaker, expand_historical_files
 from benchmark_diagnostics import diagnostic_tables
 from historical_coverage import audit_uploaded_files
@@ -745,6 +745,46 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
                                  st.session_state.get('research_memberships_40',[]))
     st.dataframe(pd.DataFrame(audit_rows40),hide_index=True,use_container_width=True)
     st.caption('Tallene viser dækning i det aktive arkiv. Manglende historiske kamp-ID og kickoff kan ikke udledes sikkert fra holdnavne og dato alene.')
+    st.markdown('**Importér forskningskampe fra ekstra turneringer**')
+    st.caption('Bruger eksisterende API-cache og adgangsnøgle. Importér kun de valgte turneringer/sæsoner. Ingen effekt på produktionens prognoser.')
+    research_codes40={'Champions League':'CL','Europa League':'EL','Conference League':'UCL',
+                      'EM':'EC','VM':'WC','VM-kvalifikation Europa':'QUFA'}
+    selected_research40=st.multiselect('Forskningsturneringer',list(research_codes40),key='sig40_research_codes')
+    season_research40=st.number_input('Sæsonens startår (forskning)',min_value=2010,
+                                     max_value=dt.date.today().year,value=dt.date.today().year,step=1,
+                                     key='sig40_research_season')
+    if st.button('Hent valgte forskningskampe',key='sig40_fetch_research'):
+        api_token40=st.secrets.get('FOOTBALL_DATA_API_KEY','') if hasattr(st,'secrets') else ''
+        if not api_token40:
+            st.warning('Mangler FOOTBALL_DATA_API_KEY i Streamlit Secrets; ingen API-kald udført.')
+        elif not selected_research40:
+            st.warning('Vælg mindst én forskningsturnering.')
+        else:
+            imported40=[];messages40=[];denied40=[];limited40=False
+            for i,name in enumerate(selected_research40):
+                code=research_codes40[name]
+                if i:time.sleep(7)
+                try:
+                    matches40=(api_matches if STORE else session_api_matches)(api_token40,code,int(season_research40))
+                    normalized40=convert_research_matches(matches40,code)
+                    imported40.extend(normalized40)
+                    messages40.append(f'{name} {season_research40}: {len(normalized40)} kampe med ID')
+                except ApiError as exc:
+                    if exc.status==403:denied40.append(name)
+                    elif exc.status==429:
+                        messages40.append('API-grænse nået; resterende turneringer blev ikke forsøgt.')
+                        limited40=True
+                        break
+                    else:messages40.append(f'{name}: API-fejl {exc.status}')
+                except Exception as exc:
+                    messages40.append(f'{name}: import mislykkedes ({type(exc).__name__})')
+            if imported40:
+                merged40,conflicts40=merge_research_matches(st.session_state.get('research_competitions_40',[]),imported40)
+                st.session_state['research_competitions_40']=merged40
+                st.success(f'{len(imported40)} kampposter behandlet; {len(merged40)} unikke poster i forskningsarkivet.')
+                if conflicts40:st.warning(f'{len(conflicts40)} poster med identitetskonflikt blev ikke overskrevet.')
+            if messages40:st.info(' | '.join(messages40))
+            if denied40:st.warning('Ingen adgang (403): '+', '.join(denied40))
     st.markdown('**Tværturneringsarkiv – verificeret dækning**')
     st.dataframe(pd.DataFrame(research_coverage(st.session_state.get('research_competitions_40',[]))),hide_index=True,use_container_width=True)
     st.caption('Forskningsarkiv for europæiske og internationale turneringer. Et nul betyder ingen verificeret dækning i dette arkiv; kampene tæller ikke automatisk i prognoserne.')
