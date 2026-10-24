@@ -70,3 +70,11 @@ Før designet vedtages:
 ## Arbejdsdisciplin
 
 Før nyt udviklingstrin: kontrollér HEAD → søg eksisterende funktion → angiv konkret fejl/hypotese → vælg mindst mulige ændring → regressionstest → CI på eksakt commit → live-verifikation ved relevans → dokumentér status og nyt restpunkt. Skeln konsekvent mellem **gemt kode** og **faktisk verificeret effekt**.
+
+## Revision 2 – databaseobjekter uden migration (24. oktober 2026)
+
+Efter registerets første revision er en læsebeskyttet `Store.schema_inventory()` føjet til den eksisterende PostgreSQL-audit. Den udlæser relationer, kolonner, constraints og indeks, som den konfigurerede databaserolle kan se. Resultatet kan eksporteres som `sig_schema_inventory.json` fra Streamlit. Ingen leverandør-HTTP eller datamodifikation er knyttet til kontrollen. Begrænsede metadatarettigheder afbryder ikke den eksisterende dataaudit. En isoleret regressionstest kontrollerer de anvendte SELECT-kald og read-only-transaktion.
+
+**Bevisniveau:** Koden er publiceret. En grøn CI-kørsel på den nyeste commit og live-udtræk af databasen er endnu **ikke dokumenteret**. Oversigten er heller ikke et komplet billede af upublicerede eksterne databaser, triggers, funktioner, ejerskabspolitikker eller adgangsrettigheder; de kræver særskilt kontrol. Ingen beslutning om at migrere er truffet.
+
+**Næste beslutningsport:** Hent skemainventaret fra den rigtige database, kontrollér CI på den præcise commit, og sammenhold objektlisten med alle dokumenterede skriveveje. Først derefter kan vi designe en afgrænset migrationsprototype i et isoleret skema.
