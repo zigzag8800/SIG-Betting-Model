@@ -769,7 +769,7 @@ with st.expander('9 · SIG 4.0 – angreb/forsvar mod SIG E (eksperiment)',expan
                     matches40=(api_matches if STORE else session_api_matches)(api_token40,code,int(season_research40))
                     normalized40=convert_research_matches(matches40,code)
                     imported40.extend(normalized40)
-                    messages40.append(f'{name} {season_research40}: {len(normalized40)} kampe med ID')
+                    messages40.append(f'{name} {season_research40}: {len(normalized40)} af {len(matches40)} kampe med verificerbare ID-felter; {len(matches40)-len(normalized40)} frasorteret')
                 except ApiError as exc:
                     if exc.status==403:denied40.append(name)
                     elif exc.status==429:
