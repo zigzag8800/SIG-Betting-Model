@@ -1,6 +1,6 @@
 """Tests for SIG 4.0 data contracts (no provider downloads)."""
 import unittest
-from data_quality_40 import coverage_report,coverage_risks,validate_identity_data,player_load
+from data_quality_40 import coverage_report,coverage_risks,validate_identity_data,player_load,club_player_load_summary
 
 class DataQualityTests(unittest.TestCase):
     def test_coverage_and_duplicates(self):
@@ -59,5 +59,26 @@ class DataQualityTests(unittest.TestCase):
         self.assertEqual(pl['Mangler kickoff UTC'],1)
         self.assertEqual(pl['Mangler datakilde'],1)
         self.assertEqual(pl['Mangler tilgængelighedstid'],1)
+
+    def test_international_minutes_attached_to_historic_club(self):
+        players=[{'player_id':'p1'},{'player_id':'p2'}]
+        memberships=[{'player_id':'p1','club_id':'ARS','from_date':'2026-01-01','to_date':''},
+                     {'player_id':'p2','club_id':'CHE','from_date':'2026-01-01','to_date':''}]
+        appearances=[{'player_id':'p1','match_id':'INT-1','date':'2026-10-20',
+                      'known_at':'2026-10-21','competition_type':'international','minutes':90},
+                     {'player_id':'p2','match_id':'INT-1','date':'2026-10-20',
+                      'known_at':'2026-10-21','competition_type':'international','minutes':80}]
+        report=club_player_load_summary(players,memberships,appearances,'ARS','2026-10-24')
+        self.assertEqual(len(report),1)
+        self.assertEqual(report[0]['international_minutes'],90)
+        self.assertEqual(report[0]['player_id'],'p1')
+        self.assertEqual(club_player_load_summary(players,memberships,appearances,'CHE','2026-10-24')[0]['international_minutes'],80)
+
+    def test_player_load_does_not_use_future_report(self):
+        p=[{'player_id':'p1'}]
+        m=[{'player_id':'p1','club_id':'ARS','from_date':'2026-01-01','to_date':''}]
+        a=[{'player_id':'p1','match_id':'INT-1','date':'2026-10-20',
+            'known_at':'2026-10-25','competition_type':'international','minutes':90}]
+        self.assertEqual(club_player_load_summary(p,m,a,'ARS','2026-10-24')[0]['international_minutes'],0)
 
 if __name__=='__main__':unittest.main()
