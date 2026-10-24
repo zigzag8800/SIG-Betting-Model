@@ -2,23 +2,31 @@ name: SIG regression checks
 on:
   push:
     paths:
-      - 'league_lab.py'
-      - 'attack_defence_40.py'
-      - 'compare_40.py'
-      - 'data_quality_40.py'
-      - 'schedule_features_40.py'
-      - 'model_lab.py'
-      - 'sig_model.py'
+      - '*.py'
       - 'tests/**'
       - '.github/workflows/regression.yml'
   workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Run regression suite
-        run: python -m unittest discover -s tests -v
+      - name: Compile Python source
+        run: python -m compileall -q -f .
+      - name: Run regression suite and save log
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests -v 2>&1 | tee regression-results.txt
+      - name: Upload regression report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sig-regression-results
+          path: regression-results.txt
+          if-no-files-found: warn
