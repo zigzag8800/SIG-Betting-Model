@@ -50,3 +50,13 @@ class RegularTimeCorrectionTests(unittest.TestCase):
     def test_extra_time_without_regular_time_and_invalid_scores_rejected(self):
         self.assertIsNone(provider_final_fields(dict(fullTime=dict(home=2,away=1),duration='EXTRA_TIME')))
         self.assertIsNone(provider_final_fields(dict(fullTime=dict(home=True,away=0),duration='REGULAR')))
+    def test_audit_checks_saved_correction_against_previous_workspace(self):
+        from archive_audit import build_report
+        updated,record=self.prepare()
+        snapshot=dict(current=updated,api=[],inventory=[],versions=[],old_workspaces=[(content_key(self.snapshot),self.snapshot)])
+        report,_=build_report(snapshot,{})
+        check=report['correction_checks'][0]
+        self.assertTrue(check['previous_workspace_present']);self.assertTrue(check['previous_result_preserved']);self.assertTrue(check['current_result_matches_record'])
+        self.assertEqual(report['analysis_status'],{'backtest_results':'stale','lab_rows':'stale'})
+        snapshot['old_workspaces']=[]
+        self.assertFalse(build_report(snapshot,{})[0]['correction_checks'][0]['previous_result_preserved'])

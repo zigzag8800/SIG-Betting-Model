@@ -149,7 +149,22 @@ def build_report(snapshot,session):
             research=summarize(data.get('research_competitions_40',[]),'postgres:workspace_version:research')))
     excluded=[dict(competition=r['league'],season=r['season'],match_id=r['match_id'],status=r['status'],date=r['date'],home=r['home'],away=r['away'])
               for r in cached if r.get('status') not in ('FINISHED','SCHEDULED','TIMED')]
-    return dict(cache_lifecycle=lifecycle_preview(current.get('history',[])+current.get('fixtures',[]),cached),provider_bundles=bundles,raw_files=raw_files,historical_versions=historical_versions,cache_exclusions=excluded,generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+    correction_checks=[]
+    versions_by_key=dict(snapshot.get('old_workspaces',[]))
+    for correction in current.get('data_corrections',[]):
+        previous=versions_by_key.get(correction.get('previous_workspace_hash'),{})
+        identity=(correction.get('source'),str(correction.get('match_id')))
+        def matches(row):return (row.get('source'),str(row.get('match_id')))==identity
+        before=correction.get('before',{});after=correction.get('after',{})
+        correction_checks.append(dict(id=correction.get('id'),source=identity[0],match_id=identity[1],
+            corrected_at=correction.get('corrected_at'),before_score=[before.get('home_goals'),before.get('away_goals')],
+            after_score=[after.get('home_goals'),after.get('away_goals')],
+            previous_workspace_present=correction.get('previous_workspace_hash') in versions_by_key,
+            previous_result_preserved=any(matches(r) and r==before for r in previous.get('history',[])),
+            current_result_matches_record=any(matches(r) and r==after for r in current.get('history',[]))))
+    analysis_status={name:('stale' if (current.get(sig) or [None])[0]=='STALE_AFTER_DATA_CORRECTION' else 'stored')
+        for name,sig in (('backtest_results','backtest_signature'),('lab_rows','lab_signature')) if name in current}
+    return dict(data_corrections=current.get('data_corrections',[]),correction_checks=correction_checks,analysis_status=analysis_status,cache_lifecycle=lifecycle_preview(current.get('history',[])+current.get('fixtures',[]),cached),provider_bundles=bundles,raw_files=raw_files,historical_versions=historical_versions,cache_exclusions=excluded,generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
         scope='All sig_archive records inventoried in one read-only repeatable-read transaction; current workspace and every API cache audited. Every workspace version and archived source CSV audited separately; versions and sources must not be added as unique matches. Provider ZIP members are audited in memory within explicit size limits; member errors or skipped entries are recorded. Raw CSV row seasons remain unknown unless explicit.',
         inventory=snapshot['inventory'],versions=snapshot['versions'],coverage=summary,
         empty_research_competitions=sorted(set(('CL','EL','UCL','EC','WC','QUFA','FAC','FLC','DFB','CDR'))-{r.get('competition') for r in current.get('research_competitions_40',[])})),cached
