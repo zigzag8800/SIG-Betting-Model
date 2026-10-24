@@ -70,3 +70,9 @@ class BundleAuditTests(unittest.TestCase):
         rows=[dict(league='PL',date='2025-01-01',home='H',away='A',home_goals=1.2,away_goals=0,kickoff_utc='2025-01-02T12:00:00Z')]
         report=summarize(rows,'test')[0]
         self.assertEqual(report['valid_results'],0);self.assertEqual(report['date_kickoff_mismatch'],1)
+    def test_invalid_source_results_are_identified_without_changing_archive(self):
+        raw=b'Div,Date,HomeTeam,AwayTeam,FTHG,FTAG,FTR\nF2,01/08/2025,H,A,,,\nF2,02/08/2025,C,D,1,0,A\n'
+        report=audit_csv(raw,'F2.csv','test')
+        self.assertEqual(report['invalid_result_count'],1)
+        self.assertEqual(report['invalid_result_rows'][0]['row_number'],2)
+        self.assertEqual(report['result_code_conflicts'],1)

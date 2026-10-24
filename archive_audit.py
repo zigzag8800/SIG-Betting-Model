@@ -6,7 +6,7 @@ import io
 import hashlib
 import zipfile
 from pathlib import PurePosixPath
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 FIELDS=('match_id','home_team_id','away_team_id','kickoff_utc','source','season','status','known_at')
 
@@ -29,7 +29,7 @@ def normalize_cached(matches,code,season):
             home=h.get('name'),away=a.get('name'),match_id=str(m.get('id') or ''),
             home_team_id=str(h.get('id') or ''),away_team_id=str(a.get('id') or ''),
             kickoff_utc=m.get('utcDate'),status=m.get('status'),source='football-data.org',
-            home_goals=score.get('home'),away_goals=score.get('away')))
+            home_goals=score.get('home'),away_goals=score.get('away'),stage=m.get('stage')))
     return rows
 
 def summarize(rows,scope):
@@ -53,7 +53,8 @@ def summarize(rows,scope):
                 if t.date().isoformat()!=str(r.get('date') or '')[:10]:date_mismatch+=1
             except (ValueError,TypeError):bad_time+=1
         dates=[str(r.get('date'))[:10] for r in games if r.get('date')]
-        result.append(dict(scope=scope,competition=code,season=season,rows=len(games),
+        pairs={(r.get('home'),r.get('away')) for r in games if r.get('home') and r.get('away')}
+        result.append(dict(stage_counts=dict(Counter(r.get('stage') or 'unknown' for r in games)),distinct_directed_pairs=len(pairs),scope=scope,competition=code,season=season,rows=len(games),
             finished=len(finished),valid_results=sum(valid_score(r) for r in finished),
             invalid_date=invalid_date,date_kickoff_mismatch=date_mismatch,
             distinct_teams=len({r.get(side) for r in games for side in ('home','away') if r.get(side)}),
@@ -157,7 +158,9 @@ def audit_csv(raw,name,scope):
         division=r.get('Div') or PurePosixPath(name).stem.upper()
         rows.append(dict(league=DIVISIONS.get(division,division),date=date,
             home=r.get('HomeTeam'),away=r.get('AwayTeam'),home_goals=r.get('FTHG'),away_goals=r.get('FTAG'),source='football-data.co.uk'))
-    return dict(name=name,sha256=hashlib.sha256(raw).hexdigest(),coverage=summarize(rows,scope),
+    invalid=[dict(row_number=i+2,date=r['date'],home=r['home'],away=r['away'],home_goals=r['home_goals'],away_goals=r['away_goals']) for i,r in enumerate(rows) if not valid_score(r)]
+    ftr_conflicts=sum(valid_score(r) and original.get('FTR') not in (None,'',('H' if float(r['home_goals'])>float(r['away_goals']) else 'A' if float(r['home_goals'])<float(r['away_goals']) else 'D')) for r,original in zip(rows,source_rows))
+    return dict(name=name,sha256=hashlib.sha256(raw).hexdigest(),coverage=summarize(rows,scope),invalid_result_rows=invalid[:100],invalid_result_count=len(invalid),result_code_conflicts=ftr_conflicts,
                 status_unverified=True,notes='CSV scores do not establish FINISHED versus AWARDED; Time is not asserted to be UTC.')
 
 def audit_bundle(item):
