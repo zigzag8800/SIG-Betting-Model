@@ -20,6 +20,9 @@ def schedule_features(schedule,as_of,league,home,away,fixture_date):
     for r in schedule:
         comp=r.get('competition_type')
         if comp not in COMPETITIONS:continue
+        # A national team is NOT a club. International workload is joined by
+        # player_id in data_quality_40, never via a matching team-name string.
+        if comp=='international':continue
         if not r.get('home') or not r.get('away') or not r.get('date'):continue
         known=r.get('known_at')
         if not known or day(known)>knowledge:continue
