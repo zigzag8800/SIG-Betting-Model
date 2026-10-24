@@ -44,6 +44,24 @@ class ApiVersioningTests(unittest.TestCase):
                          'scope:PL:2026:'+content_key(new))
         self.assertIn("VALUES('api_matches'",calls[4].args[0])
 
+    def test_failed_version_insert_never_updates_active_cache(self):
+        store=object.__new__(Store)
+        conn=MagicMock()
+        context=MagicMock()
+        context.__enter__.return_value=conn
+        store.connect=lambda: context
+        conn.execute.return_value.fetchone.return_value=None
+        def execute(query,params=None):
+            if "VALUES('api_matches_version'" in query:
+                raise RuntimeError('database write failed')
+            return MagicMock(fetchone=lambda: None)
+        conn.execute.side_effect=execute
+        with self.assertRaisesRegex(RuntimeError,'database write failed'):
+            store.put_api_matches('scope:PL:2026',[{'id':1}])
+        self.assertFalse(any("VALUES('api_matches'," in c.args[0]
+                             for c in conn.execute.call_args_list))
+        self.assertEqual(context.__exit__.call_args.args[0],RuntimeError)
+
     def test_status_is_read_only_and_returns_aggregate_counts(self):
         store=object.__new__(Store)
         conn=MagicMock()
